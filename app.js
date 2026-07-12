@@ -4,7 +4,7 @@ import { getDatabase, ref, set, onValue, get, update, push, remove, query, order
 
 // 🔴 본인의 열쇠로 반드시 교체하세요!
 const firebaseConfig = {
-    apiKey: "AIzaSyDshai0geE4xEvD7Hl8ymGvWr2kw9tWbu8",
+     apiKey: "AIzaSyDshai0geE4xEvD7Hl8ymGvWr2kw9tWbu8",
   authDomain: "pokemongraph.firebaseapp.com",
   projectId: "pokemongraph",
   storageBucket: "pokemongraph.firebasestorage.app",
@@ -107,7 +107,6 @@ onValue(ref(db, 'settings/promoTexts'), (snapshot) => {
     if (snapshot.exists()) {
         snapshot.forEach((child) => {
             const key = child.key; const text = child.val();
-            
             if(listDivUser) {
                 listDivUser.innerHTML += `<div style="background-color: #FFF3BF; padding: 12px; border-radius: 12px; font-size: 15px; color: #E67700; word-break: break-all; border: 2px dashed #FFD43B;">📢 ${text}</div>`;
             }
@@ -198,19 +197,21 @@ window.approveExchange = async (reqId, uid, amount) => {
 };
 
 // ----------------------------------------------------
-// [핵심] 🎮 배팅 시스템 (배팅취소 버튼 로직 추가)
+// [핵심] 🎮 배팅 시스템 (취소 로직 및 버튼 크기 최적화)
 // ----------------------------------------------------
 
 btnBetting.addEventListener('click', async () => {
     if (!currentUser) return alert("로그인 후 이용 가능합니다.");
     if (myBetState === 'playing' || myBetState === 'cashed_out') return; 
 
-    // ⛔ 예약된 배팅을 취소할 때 (버튼 색상 원래대로 복구)
+    // ⛔ 대기열에 있던 배팅을 취소할 때 (코인 환불 및 디자인 원상복구)
     if (myBetState === 'queued') {
+        await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + myBetAmount });
         myBetState = 'none';
         btnBetting.innerText = "배팅하기";
         btnBetting.style.backgroundColor = "#FFD43B";
         btnBetting.style.color = "#333";
+        btnBetting.style.fontSize = "24px"; // 폰트 크기 원상복구
         return;
     }
 
@@ -221,60 +222,63 @@ btnBetting.addEventListener('click', async () => {
     if (myBetAmount > 50000) return alert("최대 배팅 가능 금액은 50,000 코인입니다!");
     if (myAutoCashout < 1.01) return alert("캐시아웃 배수는 1.01 이상이어야 합니다.");
 
-    if (currentGameStatus === 'running' || currentGameStatus === 'crashed') {
-        // 이미 진행 중인 게임일 경우 취소 버튼(빨간색)으로 변경
-        myBetState = 'queued';
-        btnBetting.innerText = "❌ 배팅취소 (다음 판 예약됨)";
-        btnBetting.style.backgroundColor = "#FA5252";
-        btnBetting.style.color = "white";
-    } else if (currentGameStatus === 'waiting') {
-        // 카운트다운 대기 중일 경우 바로 참여(초록색)로 변경
-        await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin - myBetAmount });
-        myBetState = 'playing';
-        btnBetting.innerText = "✅ 배팅 완료!";
-        btnBetting.style.backgroundColor = "#40C057";
-        btnBetting.style.color = "white";
+    // 배팅 예약 확정 (코인 즉시 차감)
+    await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin - myBetAmount });
+    myBetState = 'queued';
+
+    // 취소 버튼 디자인 (버튼이 깨지지 않게 폰트 크기를 살짝 줄임)
+    btnBetting.style.backgroundColor = "#FA5252";
+    btnBetting.style.color = "white";
+    btnBetting.style.fontSize = "18px"; 
+
+    if (currentGameStatus === 'waiting') {
+        btnBetting.innerText = "❌ 취소 (이번 판)";
+    } else {
+        btnBetting.innerText = "❌ 취소 (다음 판)";
     }
 });
 
+// --- 게임 상태 감지 로직 ---
 onValue(ref(db, 'game'), (snapshot) => {
     const game = snapshot.val();
     if (!game) return;
+    
+    // 이전 상태와 현재 상태를 비교하기 위해 변수 저장
+    const previousStatus = currentGameStatus;
     currentGameStatus = game.status;
 
     if (game.status === 'waiting') {
+        // [대기 중]
         if (myBetState === 'queued') {
-            if (currentCoin >= myBetAmount) {
-                update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin - myBetAmount });
-                myBetState = 'playing';
-                btnBetting.innerText = "✅ 배팅 완료!";
-                btnBetting.style.backgroundColor = "#40C057";
-                btnBetting.style.color = "white";
-            } else {
-                myBetState = 'none';
-                btnBetting.innerText = "배팅하기";
-                btnBetting.style.backgroundColor = "#FFD43B";
-                btnBetting.style.color = "#333";
-                alert("예약된 배팅을 진행하려 했으나 코인이 부족하여 취소되었습니다.");
-            }
+            // 새로고침을 했거나 다음 판을 예약해둔 유저
+            btnBetting.innerText = "❌ 취소 (이번 판)";
+            btnBetting.style.backgroundColor = "#FA5252";
+            btnBetting.style.color = "white";
+            btnBetting.style.fontSize = "18px";
         } else if (myBetState === 'none') {
             btnBetting.innerText = "배팅하기";
             btnBetting.style.backgroundColor = "#FFD43B";
             btnBetting.style.color = "#333";
+            btnBetting.style.fontSize = "24px";
         }
         startCountdownVisuals(game.nextStartTime);
 
     } else if (game.status === 'running') {
-        if (myBetState === 'playing') {
-            btnBetting.innerText = `🚀 게임 진행중... (목표: ${myAutoCashout}x)`;
+        // [로켓 발사!] -> 대기 중이던 예약자들을 게임에 공식 참여시킴
+        if (previousStatus === 'waiting' && myBetState === 'queued') {
+            myBetState = 'playing';
+            btnBetting.innerText = `🚀 비행중 (${myAutoCashout}x)`;
             btnBetting.style.backgroundColor = "#74C0FC";
             btnBetting.style.color = "white";
+            btnBetting.style.fontSize = "18px";
         }
         startGameVisuals(game.startTime, game.crashPoint);
 
     } else if (game.status === 'crashed') {
-        if (myBetState === 'playing') myBetState = 'none';
-        if (myBetState === 'cashed_out') myBetState = 'none';
+        // [폭발 종료] -> 게임에 참여했던 유저들의 상태를 초기화
+        if (myBetState === 'playing' || myBetState === 'cashed_out') {
+            myBetState = 'none';
+        }
         stopGameVisuals(game.crashPoint);
     }
 });
@@ -308,12 +312,13 @@ function startGameVisuals(startTime, crashPoint) {
         multiplierDisplay.innerText = currentMulti.toFixed(2) + "x";
         multiplierDisplay.style.color = "#40C057";
 
+        // ⭐ 실시간 캐시아웃(승리) 판정
         if (myBetState === 'playing' && currentMulti >= myAutoCashout) {
             myBetState = 'cashed_out';
             const winAmount = Math.floor(myBetAmount * myAutoCashout);
             update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
             
-            btnBetting.innerText = `🎉 성공! +${winAmount.toLocaleString()} 획득`;
+            btnBetting.innerText = `🎉 +${winAmount.toLocaleString()} 획득!`;
             btnBetting.style.backgroundColor = "#E64980"; 
             btnBetting.style.color = "white";
         }
