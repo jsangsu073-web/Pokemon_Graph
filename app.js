@@ -24,15 +24,14 @@ const bustedMsg = document.getElementById('busted-msg');
 const countdownMsg = document.getElementById('countdown-msg');
 const countdownSec = document.getElementById('countdown-sec');
 const canvas = document.getElementById('graph-canvas');
-const btnBetting = document.getElementById('btn-betting'); // 배팅 버튼 추가
+const btnBetting = document.getElementById('btn-betting');
 
 let currentUser = null; let currentDiscordId = ""; let currentCoin = 0;
 let isAdmin = false; let inactivityTimer;
 let gameAnimationId; let countdownAnimationId;
 
-// 🎲 배팅 관련 변수
 let currentGameStatus = 'offline';
-let myBetState = 'none'; // 'none', 'queued'(대기중), 'playing'(참여중), 'cashed_out'(성공)
+let myBetState = 'none'; 
 let myBetAmount = 0;
 let myAutoCashout = 0;
 
@@ -77,12 +76,6 @@ onAuthStateChanged(auth, (user) => {
     }
 });
 
-// 실시간 배너 동기화
-onValue(ref(db, 'settings/bannerUrl'), (snapshot) => {
-    const url = snapshot.val();
-    if (url) document.getElementById('banner-img').src = url; 
-});
-
 // --- 유저: 충전/환전 신청 ---
 document.getElementById('btn-req-charge').addEventListener('click', async () => {
     const amount = prompt("충전 신청할 코인 수량을 숫자로만 입력하세요:");
@@ -98,6 +91,43 @@ document.getElementById('btn-req-exchange').addEventListener('click', async () =
     alert("✅ 환전 신청이 성공적으로 접수되었습니다!");
 });
 
+
+// --- 홍보 배너 및 텍스트 실시간 동기화 ---
+onValue(ref(db, 'settings/bannerUrl'), (snapshot) => {
+    const url = snapshot.val();
+    if (url) document.getElementById('banner-img').src = url; 
+});
+
+onValue(ref(db, 'settings/promoTexts'), (snapshot) => {
+    const listDivUser = document.getElementById('promo-list');
+    const listDivAdmin = document.getElementById('admin-promo-list');
+    if(listDivUser) listDivUser.innerHTML = '';
+    if(listDivAdmin) listDivAdmin.innerHTML = '';
+
+    if (snapshot.exists()) {
+        snapshot.forEach((child) => {
+            const key = child.key; const text = child.val();
+            
+            if(listDivUser) {
+                listDivUser.innerHTML += `<div style="background-color: #FFF3BF; padding: 12px; border-radius: 12px; font-size: 15px; color: #E67700; word-break: break-all; border: 2px dashed #FFD43B;">📢 ${text}</div>`;
+            }
+            if(listDivAdmin) {
+                listDivAdmin.innerHTML += `
+                <div class="req-item" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${text}</span>
+                    <button class="btn btn-exchange" style="padding: 3px 8px; font-size: 12px; margin-left: 5px;" onclick="window.removePromo('${key}')">삭제</button>
+                </div>`;
+            }
+        });
+    } else {
+        if(listDivAdmin) listDivAdmin.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">등록된 홍보가 없습니다.</span>';
+    }
+});
+
+window.removePromo = async (key) => {
+    await remove(ref(db, 'settings/promoTexts/' + key));
+};
+
 // --- 관리자 전용 데이터 로드 ---
 function loadAdminData() {
     document.getElementById('btn-admin-banner').onclick = async () => {
@@ -107,22 +137,29 @@ function loadAdminData() {
         alert("배너 이미지가 변경되었습니다!"); document.getElementById('admin-banner-url').value = '';
     };
 
+    document.getElementById('btn-admin-promo').onclick = async () => {
+        const text = document.getElementById('admin-promo-text').value.trim();
+        if (!text) return alert("추가할 홍보 텍스트를 입력해주세요!");
+        await push(ref(db, 'settings/promoTexts'), text);
+        document.getElementById('admin-promo-text').value = '';
+    };
+
     document.getElementById('btn-admin-give').onclick = async () => {
         const targetId = document.getElementById('admin-target-id').value.trim();
         const amount = Number(document.getElementById('admin-give-coin').value);
         if (!targetId || !amount) return alert("아이디와 코인 수량을 입력해주세요!");
         
-        const q = query(ref(db, 'users'), orderByChild('discordId'), equalTo(targetId));
-        const snapshot = await get(q);
-        if (snapshot.exists()) {
-            snapshot.forEach((child) => {
-                update(ref(db, 'users/' + child.key), { coin: child.val().coin + amount });
-                alert(`✅ [${targetId}]님에게 ${amount.toLocaleString()} 포켓코인 지급 완료!`);
-            });
-            document.getElementById('admin-target-id').value = ''; document.getElementById('admin-give-coin').value = '';
-        } else { 
-            alert(`❌ "${targetId}" 유저를 찾을 수 없습니다. 아이디를 정확히 확인해주세요.`); 
-        }
+        try {
+            const q = query(ref(db, 'users'), orderByChild('discordId'), equalTo(targetId));
+            const snapshot = await get(q);
+            if (snapshot.exists()) {
+                snapshot.forEach((child) => {
+                    update(ref(db, 'users/' + child.key), { coin: child.val().coin + amount });
+                    alert(`✅ [${targetId}]님에게 ${amount.toLocaleString()} 포켓코인 지급 완료!`);
+                });
+                document.getElementById('admin-target-id').value = ''; document.getElementById('admin-give-coin').value = '';
+            } else { alert(`❌ "${targetId}" 유저를 찾을 수 없습니다. 아이디를 정확히 확인해주세요.`); }
+        } catch(e) { alert("지급 중 오류 발생: " + e.message); }
     };
 
     onValue(ref(db, 'requests/charge'), (snapshot) => {
@@ -161,67 +198,69 @@ window.approveExchange = async (reqId, uid, amount) => {
 };
 
 // ----------------------------------------------------
-// [핵심] 🎮 배팅 시스템 및 게임 렌더링 🎮
+// [핵심] 🎮 배팅 시스템 (배팅취소 버튼 로직 추가)
 // ----------------------------------------------------
 
-// 1. 배팅 버튼 클릭 이벤트
 btnBetting.addEventListener('click', async () => {
     if (!currentUser) return alert("로그인 후 이용 가능합니다.");
-    if (myBetState === 'playing' || myBetState === 'cashed_out') return; // 게임 중엔 조작 불가
+    if (myBetState === 'playing' || myBetState === 'cashed_out') return; 
+
+    // ⛔ 예약된 배팅을 취소할 때 (버튼 색상 원래대로 복구)
+    if (myBetState === 'queued') {
+        myBetState = 'none';
+        btnBetting.innerText = "배팅하기";
+        btnBetting.style.backgroundColor = "#FFD43B";
+        btnBetting.style.color = "#333";
+        return;
+    }
 
     myBetAmount = Number(document.getElementById('bet-amount').value);
     myAutoCashout = Number(document.getElementById('auto-cashout').value);
 
     if (myBetAmount <= 0 || myBetAmount > currentCoin) return alert("보유 코인이 부족하거나 올바른 금액이 아닙니다.");
+    if (myBetAmount > 50000) return alert("최대 배팅 가능 금액은 50,000 코인입니다!");
     if (myAutoCashout < 1.01) return alert("캐시아웃 배수는 1.01 이상이어야 합니다.");
 
-    // 대기중이었는데 다시 누르면 배팅 취소
-    if (myBetState === 'queued') {
-        myBetState = 'none';
-        btnBetting.innerText = "배팅하기";
-        btnBetting.style.backgroundColor = "#FFD43B";
-        return;
-    }
-
-    // 게임 상태에 따른 배팅 처리
     if (currentGameStatus === 'running' || currentGameStatus === 'crashed') {
-        // 이미 날아간 로켓이라면 다음 판 대기열에 등록
+        // 이미 진행 중인 게임일 경우 취소 버튼(빨간색)으로 변경
         myBetState = 'queued';
-        btnBetting.innerText = "⏳ 배팅대기중 (취소하려면 클릭)";
-        btnBetting.style.backgroundColor = "#ADB5BD";
+        btnBetting.innerText = "❌ 배팅취소 (다음 판 예약됨)";
+        btnBetting.style.backgroundColor = "#FA5252";
+        btnBetting.style.color = "white";
     } else if (currentGameStatus === 'waiting') {
-        // 카운트다운 중이라면 즉시 코인 차감하고 배팅 완료
+        // 카운트다운 대기 중일 경우 바로 참여(초록색)로 변경
         await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin - myBetAmount });
         myBetState = 'playing';
         btnBetting.innerText = "✅ 배팅 완료!";
         btnBetting.style.backgroundColor = "#40C057";
+        btnBetting.style.color = "white";
     }
 });
 
-
-// 2. 서버 상태 변경 감지
 onValue(ref(db, 'game'), (snapshot) => {
     const game = snapshot.val();
     if (!game) return;
     currentGameStatus = game.status;
 
     if (game.status === 'waiting') {
-        // 대기열에 있던 유저들의 코인을 차감하고 게임에 참여시킴
         if (myBetState === 'queued') {
             if (currentCoin >= myBetAmount) {
                 update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin - myBetAmount });
                 myBetState = 'playing';
                 btnBetting.innerText = "✅ 배팅 완료!";
                 btnBetting.style.backgroundColor = "#40C057";
+                btnBetting.style.color = "white";
             } else {
                 myBetState = 'none';
                 btnBetting.innerText = "배팅하기";
                 btnBetting.style.backgroundColor = "#FFD43B";
+                btnBetting.style.color = "#333";
                 alert("예약된 배팅을 진행하려 했으나 코인이 부족하여 취소되었습니다.");
             }
         } else if (myBetState === 'none') {
             btnBetting.innerText = "배팅하기";
             btnBetting.style.backgroundColor = "#FFD43B";
+            btnBetting.style.color = "#333";
         }
         startCountdownVisuals(game.nextStartTime);
 
@@ -229,23 +268,17 @@ onValue(ref(db, 'game'), (snapshot) => {
         if (myBetState === 'playing') {
             btnBetting.innerText = `🚀 게임 진행중... (목표: ${myAutoCashout}x)`;
             btnBetting.style.backgroundColor = "#74C0FC";
+            btnBetting.style.color = "white";
         }
         startGameVisuals(game.startTime, game.crashPoint);
 
     } else if (game.status === 'crashed') {
-        if (myBetState === 'playing') {
-            // 안타깝게도 캐시아웃 전에 터졌음 (패배)
-            myBetState = 'none';
-        }
-        if (myBetState === 'cashed_out') {
-            // 이번 판 승리자 (다음 판을 위해 초기화)
-            myBetState = 'none';
-        }
+        if (myBetState === 'playing') myBetState = 'none';
+        if (myBetState === 'cashed_out') myBetState = 'none';
         stopGameVisuals(game.crashPoint);
     }
 });
 
-// 3. 애니메이션 및 캐시아웃(승리) 판정 함수들
 function startCountdownVisuals(nextStartTime) {
     cancelAnimationFrame(gameAnimationId); cancelAnimationFrame(countdownAnimationId);
     bustedMsg.style.display = 'none'; countdownMsg.style.display = 'block'; 
@@ -275,23 +308,20 @@ function startGameVisuals(startTime, crashPoint) {
         multiplierDisplay.innerText = currentMulti.toFixed(2) + "x";
         multiplierDisplay.style.color = "#40C057";
 
-        // ⭐ 실시간 캐시아웃(승리) 판정
         if (myBetState === 'playing' && currentMulti >= myAutoCashout) {
             myBetState = 'cashed_out';
             const winAmount = Math.floor(myBetAmount * myAutoCashout);
-            // 승리 상금 지급
             update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
             
             btnBetting.innerText = `🎉 성공! +${winAmount.toLocaleString()} 획득`;
-            btnBetting.style.backgroundColor = "#E64980"; // 승리의 핑크
+            btnBetting.style.backgroundColor = "#E64980"; 
+            btnBetting.style.color = "white";
         }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.beginPath(); ctx.moveTo(0, canvas.height);
-        
         let progress = Math.min((currentMulti - 1) / 3, 1);
         let currentX = canvas.width * progress; let currentY = canvas.height - (canvas.height * progress);
-        
         ctx.lineTo(currentX, currentY); ctx.strokeStyle = "#FFD43B"; ctx.lineWidth = 6; ctx.stroke();
 
         if (currentMulti < crashPoint) gameAnimationId = requestAnimationFrame(draw);
@@ -308,7 +338,6 @@ function stopGameVisuals(crashPoint) {
     const ctx = canvas.getContext('2d'); ctx.strokeStyle = "#FA5252"; ctx.stroke();
 }
 
-// --- 최근 10개 게임 기록 불러오기 ---
 onValue(query(ref(db, 'history'), limitToLast(10)), (snapshot) => {
     const listDiv = document.getElementById('history-list');
     listDiv.innerHTML = '';

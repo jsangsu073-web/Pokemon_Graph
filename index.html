@@ -9,31 +9,23 @@
 </head>
 <body>
 
-    <!-- 로그인 화면 -->
     <div id="login-screen" class="login-container">
         <div class="login-box">
             <h1 class="logo" style="margin-bottom: 20px; font-size: 36px;">⚡ 포켓몬 그래프 ⚡</h1>
             <p style="color: #868E96; margin-bottom: 30px;">디스코드 활동명으로 가입해주세요!</p>
-            
             <div class="input-group" style="margin-bottom: 15px;">
                 <label>아이디 (디스코드 활동명)</label>
-                <div class="input-box">
-                    <input type="text" id="user-id" placeholder="아이디를 입력하세요">
-                </div>
+                <div class="input-box"><input type="text" id="user-id" placeholder="아이디를 입력하세요"></div>
             </div>
             <div class="input-group" style="margin-bottom: 25px;">
                 <label>비밀번호</label>
-                <div class="input-box">
-                    <input type="password" id="user-pw" placeholder="비밀번호를 입력하세요">
-                </div>
+                <div class="input-box"><input type="password" id="user-pw" placeholder="비밀번호를 입력하세요"></div>
             </div>
-
             <button class="btn btn-bet" style="width: 100%; margin-bottom: 10px;" id="btn-login">로그인</button>
             <button class="btn btn-charge" style="width: 100%; padding: 15px; font-size: 20px;" id="btn-register">회원가입</button>
         </div>
     </div>
 
-    <!-- 게임 메인 화면 -->
     <div id="game-screen" style="display: none; width: 100%; display: flex; flex-direction: column; align-items: center;">
         <header>
             <div class="logo">⚡ 포켓몬 그래프 ⚡</div>
@@ -50,12 +42,19 @@
             <h2>🛠️ 관리자 전용 컨트롤 패널</h2>
             <div class="admin-grid">
                 
+                <!-- 배너 및 텍스트 홍보 관리 -->
                 <div class="admin-section" style="background-color: #2b8a3e;">
-                    <h3>🖼️ 좌측 배너 이미지 변경</h3>
+                    <h3>🖼️ 배너 및 홍보 텍스트 관리</h3>
                     <div style="display: flex; gap: 5px; margin-top: 10px;">
                         <input type="text" id="admin-banner-url" placeholder="이미지 주소(URL) 입력" style="width: 70%;">
-                        <button id="btn-admin-banner" class="btn btn-charge" style="width: 30%; font-size: 14px; padding: 5px;">등록</button>
+                        <button id="btn-admin-banner" class="btn btn-charge" style="width: 30%; font-size: 14px; padding: 5px;">사진등록</button>
                     </div>
+                    <div style="display: flex; gap: 5px; margin-top: 10px;">
+                        <input type="text" id="admin-promo-text" placeholder="홍보 텍스트 입력" style="width: 70%;">
+                        <button id="btn-admin-promo" class="btn btn-bet" style="width: 30%; font-size: 14px; padding: 5px;">추가</button>
+                    </div>
+                    <!-- 관리자용 홍보 목록 (삭제 버튼 포함) -->
+                    <div id="admin-promo-list" style="margin-top: 10px; display: flex; flex-direction: column; gap: 5px; max-height: 100px; overflow-y: auto;"></div>
                 </div>
 
                 <div class="admin-section">
@@ -79,14 +78,16 @@
         </div>
 
         <div class="container">
-            <!-- 좌측 배너 -->
+            <!-- 좌측 배너 (업데이트 됨) -->
             <aside class="left-banner">
                 <img id="banner-img" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" alt="포켓몬 배너">
-                <h3 style="margin-top: 10px; color: #495057;">⚡ 행운의 포켓몬 ⚡</h3>
+                <h3 style="margin-top: 10px; color: #495057;">📢 홍보 배너</h3>
+                
+                <!-- 유저 화면에 보이는 홍보 텍스트 리스트 -->
+                <div id="promo-list" style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px; width: 100%;"></div>
             </aside>
 
             <main class="game-area">
-                <!-- 그래프 캔버스 -->
                 <div class="chart-box" style="position: relative;">
                     <canvas id="graph-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
                     <div class="multiplier" id="display-multiplier" style="position: absolute; z-index: 10;">1.00x</div>
@@ -96,34 +97,22 @@
                     </div>
                 </div>
 
-                <!-- 배팅 컨트롤 -->
                 <div class="betting-controls">
                     <div class="input-group">
                         <label>배팅 금액</label>
-                        <div class="input-box">
-                            <input type="number" id="bet-amount" value="1000">
-                            <span>코인</span>
-                        </div>
+                        <div class="input-box"><input type="number" id="bet-amount" value="1000"><span>코인</span></div>
                     </div>
                     <div class="input-group">
                         <label>자동 캐시아웃</label>
-                        <div class="input-box">
-                            <input type="number" id="auto-cashout" value="2.00">
-                            <span>배</span>
-                        </div>
+                        <div class="input-box"><input type="number" id="auto-cashout" value="2.00"><span>배</span></div>
                     </div>
                     <button class="btn btn-bet" id="btn-betting">배팅하기</button>
                 </div>
 
-                <!-- 최근 게임 기록 (새로 추가됨) -->
                 <div class="history-box">
                     <h3 style="font-size: 16px; color: #495057;">최근 게임 기록</h3>
-                    <div class="history-list" id="history-list">
-                        <!-- 기록이 여기에 나타납니다 -->
-                        <span style="color: #ADB5BD; font-size: 14px;">기록 대기 중...</span>
-                    </div>
+                    <div class="history-list" id="history-list"><span style="color: #ADB5BD; font-size: 14px;">기록 대기 중...</span></div>
                 </div>
-
             </main>
         </div>
     </div>
