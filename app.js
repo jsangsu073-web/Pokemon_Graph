@@ -4,7 +4,7 @@ import { getDatabase, ref, set, onValue, get, update, push, remove, query, order
 
 // 🔴 본인의 열쇠로 반드시 교체하세요!
 const firebaseConfig = {
-     apiKey: "AIzaSyDshai0geE4xEvD7Hl8ymGvWr2kw9tWbu8",
+    apiKey: "AIzaSyDshai0geE4xEvD7Hl8ymGvWr2kw9tWbu8",
   authDomain: "pokemongraph.firebaseapp.com",
   projectId: "pokemongraph",
   storageBucket: "pokemongraph.firebasestorage.app",
@@ -24,10 +24,17 @@ const bustedMsg = document.getElementById('busted-msg');
 const countdownMsg = document.getElementById('countdown-msg');
 const countdownSec = document.getElementById('countdown-sec');
 const canvas = document.getElementById('graph-canvas');
+const btnBetting = document.getElementById('btn-betting'); // 배팅 버튼 추가
 
 let currentUser = null; let currentDiscordId = ""; let currentCoin = 0;
 let isAdmin = false; let inactivityTimer;
 let gameAnimationId; let countdownAnimationId;
+
+// 🎲 배팅 관련 변수
+let currentGameStatus = 'offline';
+let myBetState = 'none'; // 'none', 'queued'(대기중), 'playing'(참여중), 'cashed_out'(성공)
+let myBetAmount = 0;
+let myAutoCashout = 0;
 
 // --- 로그인 / 회원가입 ---
 document.getElementById('btn-register').addEventListener('click', async () => {
@@ -76,28 +83,19 @@ onValue(ref(db, 'settings/bannerUrl'), (snapshot) => {
     if (url) document.getElementById('banner-img').src = url; 
 });
 
-// --- 유저: 충전/환전 신청 (알림창 완벽 추가!) ---
+// --- 유저: 충전/환전 신청 ---
 document.getElementById('btn-req-charge').addEventListener('click', async () => {
     const amount = prompt("충전 신청할 코인 수량을 숫자로만 입력하세요:");
     if (!amount || isNaN(amount) || Number(amount) <= 0) return alert("올바른 수량을 입력해주세요!");
-    try {
-        await push(ref(db, 'requests/charge'), { uid: currentUser.uid, discordId: currentDiscordId, amount: Number(amount) });
-        alert("✅ 충전 신청이 성공적으로 접수되었습니다!");
-    } catch(e) {
-        alert("데이터베이스 오류가 발생했습니다: " + e.message);
-    }
+    await push(ref(db, 'requests/charge'), { uid: currentUser.uid, discordId: currentDiscordId, amount: Number(amount) });
+    alert("✅ 충전 신청이 성공적으로 접수되었습니다!");
 });
-
 document.getElementById('btn-req-exchange').addEventListener('click', async () => {
     const amount = prompt("환전 신청할 코인 수량을 숫자로만 입력하세요:");
     if (!amount || isNaN(amount) || Number(amount) <= 0) return alert("올바른 수량을 입력해주세요!");
     if (Number(amount) > currentCoin) return alert("❌ 현재 보유하신 포켓코인보다 큰 금액은 환전할 수 없습니다!");
-    try {
-        await push(ref(db, 'requests/exchange'), { uid: currentUser.uid, discordId: currentDiscordId, amount: Number(amount) });
-        alert("✅ 환전 신청이 성공적으로 접수되었습니다!");
-    } catch(e) {
-        alert("데이터베이스 오류가 발생했습니다: " + e.message);
-    }
+    await push(ref(db, 'requests/exchange'), { uid: currentUser.uid, discordId: currentDiscordId, amount: Number(amount) });
+    alert("✅ 환전 신청이 성공적으로 접수되었습니다!");
 });
 
 // --- 관리자 전용 데이터 로드 ---
@@ -114,20 +112,16 @@ function loadAdminData() {
         const amount = Number(document.getElementById('admin-give-coin').value);
         if (!targetId || !amount) return alert("아이디와 코인 수량을 입력해주세요!");
         
-        try {
-            const q = query(ref(db, 'users'), orderByChild('discordId'), equalTo(targetId));
-            const snapshot = await get(q);
-            if (snapshot.exists()) {
-                snapshot.forEach((child) => {
-                    update(ref(db, 'users/' + child.key), { coin: child.val().coin + amount });
-                    alert(`✅ [${targetId}]님에게 ${amount.toLocaleString()} 포켓코인 지급 완료!`);
-                });
-                document.getElementById('admin-target-id').value = ''; document.getElementById('admin-give-coin').value = '';
-            } else { 
-                alert(`❌ "${targetId}" 유저를 찾을 수 없습니다. 아이디를 정확히 확인해주세요.`); 
-            }
-        } catch(e) {
-            alert("지급 중 오류 발생: " + e.message);
+        const q = query(ref(db, 'users'), orderByChild('discordId'), equalTo(targetId));
+        const snapshot = await get(q);
+        if (snapshot.exists()) {
+            snapshot.forEach((child) => {
+                update(ref(db, 'users/' + child.key), { coin: child.val().coin + amount });
+                alert(`✅ [${targetId}]님에게 ${amount.toLocaleString()} 포켓코인 지급 완료!`);
+            });
+            document.getElementById('admin-target-id').value = ''; document.getElementById('admin-give-coin').value = '';
+        } else { 
+            alert(`❌ "${targetId}" 유저를 찾을 수 없습니다. 아이디를 정확히 확인해주세요.`); 
         }
     };
 
@@ -166,15 +160,92 @@ window.approveExchange = async (reqId, uid, amount) => {
     }
 };
 
-// --- 게임 렌더링 ---
+// ----------------------------------------------------
+// [핵심] 🎮 배팅 시스템 및 게임 렌더링 🎮
+// ----------------------------------------------------
+
+// 1. 배팅 버튼 클릭 이벤트
+btnBetting.addEventListener('click', async () => {
+    if (!currentUser) return alert("로그인 후 이용 가능합니다.");
+    if (myBetState === 'playing' || myBetState === 'cashed_out') return; // 게임 중엔 조작 불가
+
+    myBetAmount = Number(document.getElementById('bet-amount').value);
+    myAutoCashout = Number(document.getElementById('auto-cashout').value);
+
+    if (myBetAmount <= 0 || myBetAmount > currentCoin) return alert("보유 코인이 부족하거나 올바른 금액이 아닙니다.");
+    if (myAutoCashout < 1.01) return alert("캐시아웃 배수는 1.01 이상이어야 합니다.");
+
+    // 대기중이었는데 다시 누르면 배팅 취소
+    if (myBetState === 'queued') {
+        myBetState = 'none';
+        btnBetting.innerText = "배팅하기";
+        btnBetting.style.backgroundColor = "#FFD43B";
+        return;
+    }
+
+    // 게임 상태에 따른 배팅 처리
+    if (currentGameStatus === 'running' || currentGameStatus === 'crashed') {
+        // 이미 날아간 로켓이라면 다음 판 대기열에 등록
+        myBetState = 'queued';
+        btnBetting.innerText = "⏳ 배팅대기중 (취소하려면 클릭)";
+        btnBetting.style.backgroundColor = "#ADB5BD";
+    } else if (currentGameStatus === 'waiting') {
+        // 카운트다운 중이라면 즉시 코인 차감하고 배팅 완료
+        await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin - myBetAmount });
+        myBetState = 'playing';
+        btnBetting.innerText = "✅ 배팅 완료!";
+        btnBetting.style.backgroundColor = "#40C057";
+    }
+});
+
+
+// 2. 서버 상태 변경 감지
 onValue(ref(db, 'game'), (snapshot) => {
     const game = snapshot.val();
     if (!game) return;
-    if (game.status === 'waiting') startCountdownVisuals(game.nextStartTime);
-    else if (game.status === 'running') startGameVisuals(game.startTime, game.crashPoint);
-    else if (game.status === 'crashed') stopGameVisuals(game.crashPoint);
+    currentGameStatus = game.status;
+
+    if (game.status === 'waiting') {
+        // 대기열에 있던 유저들의 코인을 차감하고 게임에 참여시킴
+        if (myBetState === 'queued') {
+            if (currentCoin >= myBetAmount) {
+                update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin - myBetAmount });
+                myBetState = 'playing';
+                btnBetting.innerText = "✅ 배팅 완료!";
+                btnBetting.style.backgroundColor = "#40C057";
+            } else {
+                myBetState = 'none';
+                btnBetting.innerText = "배팅하기";
+                btnBetting.style.backgroundColor = "#FFD43B";
+                alert("예약된 배팅을 진행하려 했으나 코인이 부족하여 취소되었습니다.");
+            }
+        } else if (myBetState === 'none') {
+            btnBetting.innerText = "배팅하기";
+            btnBetting.style.backgroundColor = "#FFD43B";
+        }
+        startCountdownVisuals(game.nextStartTime);
+
+    } else if (game.status === 'running') {
+        if (myBetState === 'playing') {
+            btnBetting.innerText = `🚀 게임 진행중... (목표: ${myAutoCashout}x)`;
+            btnBetting.style.backgroundColor = "#74C0FC";
+        }
+        startGameVisuals(game.startTime, game.crashPoint);
+
+    } else if (game.status === 'crashed') {
+        if (myBetState === 'playing') {
+            // 안타깝게도 캐시아웃 전에 터졌음 (패배)
+            myBetState = 'none';
+        }
+        if (myBetState === 'cashed_out') {
+            // 이번 판 승리자 (다음 판을 위해 초기화)
+            myBetState = 'none';
+        }
+        stopGameVisuals(game.crashPoint);
+    }
 });
 
+// 3. 애니메이션 및 캐시아웃(승리) 판정 함수들
 function startCountdownVisuals(nextStartTime) {
     cancelAnimationFrame(gameAnimationId); cancelAnimationFrame(countdownAnimationId);
     bustedMsg.style.display = 'none'; countdownMsg.style.display = 'block'; 
@@ -203,6 +274,17 @@ function startGameVisuals(startTime, crashPoint) {
 
         multiplierDisplay.innerText = currentMulti.toFixed(2) + "x";
         multiplierDisplay.style.color = "#40C057";
+
+        // ⭐ 실시간 캐시아웃(승리) 판정
+        if (myBetState === 'playing' && currentMulti >= myAutoCashout) {
+            myBetState = 'cashed_out';
+            const winAmount = Math.floor(myBetAmount * myAutoCashout);
+            // 승리 상금 지급
+            update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
+            
+            btnBetting.innerText = `🎉 성공! +${winAmount.toLocaleString()} 획득`;
+            btnBetting.style.backgroundColor = "#E64980"; // 승리의 핑크
+        }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.beginPath(); ctx.moveTo(0, canvas.height);
