@@ -50,13 +50,12 @@
             <h2>🛠️ 관리자 전용 컨트롤 패널</h2>
             <div class="admin-grid">
                 
-                <!-- 자동 게임 통제소 -->
-                <div class="admin-section" style="background-color: #2F9E44;">
-                    <h3>🤖 자동 게임 통제소</h3>
-                    <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
-                        <button id="btn-admin-auto" class="btn btn-charge" style="width: 100%; font-size: 18px; padding: 10px;">🤖 24시간 자동 발사기 켜기</button>
+                <div class="admin-section" style="background-color: #2b8a3e;">
+                    <h3>🖼️ 좌측 배너 이미지 변경</h3>
+                    <div style="display: flex; gap: 5px; margin-top: 10px;">
+                        <input type="text" id="admin-banner-url" placeholder="이미지 주소(URL) 입력" style="width: 70%;">
+                        <button id="btn-admin-banner" class="btn btn-charge" style="width: 30%; font-size: 14px; padding: 5px;">등록</button>
                     </div>
-                    <p style="font-size: 13px; color: #D3F9D8; margin-top: 8px;">* 관리자님의 인터넷 창이 켜져 있는 동안에만 무한 루프가 작동합니다.</p>
                 </div>
 
                 <div class="admin-section">
@@ -80,25 +79,24 @@
         </div>
 
         <div class="container">
+            <!-- 좌측 배너 -->
             <aside class="left-banner">
-                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" alt="포켓몬 배너">
-                <h3>오늘의 행운 포켓몬!</h3>
+                <img id="banner-img" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" alt="포켓몬 배너">
+                <h3 style="margin-top: 10px; color: #495057;">⚡ 행운의 포켓몬 ⚡</h3>
             </aside>
 
             <main class="game-area">
-                
-                <!-- 그래프 캔버스 및 카운트다운 추가 -->
+                <!-- 그래프 캔버스 -->
                 <div class="chart-box" style="position: relative;">
                     <canvas id="graph-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
                     <div class="multiplier" id="display-multiplier" style="position: absolute; z-index: 10;">1.00x</div>
                     <div id="busted-msg" style="position: absolute; z-index: 10; display: none; color: #FA5252; font-size: 48px; font-weight: bold; top: 30px;">포켓몬 도망침! (Busted)</div>
-                    
-                    <!-- 새로 추가된 카운트다운 문구 -->
                     <div id="countdown-msg" style="position: absolute; z-index: 10; display: none; color: #868E96; font-size: 24px; font-weight: bold; top: 30px;">
                         다음 야생 포켓몬 출현까지: <span id="countdown-sec" style="color:#E67700;">15.0</span>초
                     </div>
                 </div>
 
+                <!-- 배팅 컨트롤 -->
                 <div class="betting-controls">
                     <div class="input-group">
                         <label>배팅 금액</label>
@@ -116,6 +114,16 @@
                     </div>
                     <button class="btn btn-bet" id="btn-betting">배팅하기</button>
                 </div>
+
+                <!-- 최근 게임 기록 (새로 추가됨) -->
+                <div class="history-box">
+                    <h3 style="font-size: 16px; color: #495057;">최근 게임 기록</h3>
+                    <div class="history-list" id="history-list">
+                        <!-- 기록이 여기에 나타납니다 -->
+                        <span style="color: #ADB5BD; font-size: 14px;">기록 대기 중...</span>
+                    </div>
+                </div>
+
             </main>
         </div>
     </div>
