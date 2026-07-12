@@ -1,0 +1,284 @@
+/* 기본 설정 및 폰트 적용 */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Jua', sans-serif;
+}
+
+body {
+    background-color: #FFF9E6; /* 따뜻한 파스텔 노랑 배경 */
+    color: #333;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+}
+
+/* 상단 헤더 */
+header {
+    width: 100%;
+    max-width: 1000px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background-color: #ffffff;
+    border-bottom: 4px solid #FFD43B; /* 피카츄 꼬리 같은 노란색 포인트 */
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    border-radius: 0 0 20px 20px;
+    margin-bottom: 20px;
+}
+
+.logo {
+    font-size: 28px;
+    color: #E64980;
+}
+
+.user-info {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    font-size: 18px;
+}
+
+.coin {
+    background-color: #FFF3BF;
+    padding: 5px 15px;
+    border-radius: 20px;
+    color: #E67700;
+}
+
+/* 버튼 디자인 공통 */
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: transform 0.2s;
+}
+.btn:hover {
+    transform: scale(1.05); /* 마우스 올렸을 때 살짝 커지는 효과 */
+}
+
+.btn-charge { background-color: #74C0FC; color: white; }
+.btn-exchange { background-color: #FFA8A8; color: white; }
+
+/* 메인 컨테이너 */
+.container {
+    width: 100%;
+    max-width: 1000px;
+    display: flex;
+    gap: 20px;
+    padding: 0 20px;
+}
+
+/* 좌측 배너 영역 */
+.left-banner {
+    flex: 1;
+    background-color: white;
+    border-radius: 20px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+.left-banner img {
+    width: 100%;
+    max-width: 200px;
+    border-radius: 15px;
+    margin-bottom: 15px;
+}
+
+/* 중앙 게임 영역 */
+.game-area {
+    flex: 2.5;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* 그래프 화면 */
+.chart-box {
+    background-color: #ffffff;
+    height: 300px;
+    border-radius: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 3px solid #E9ECEF;
+}
+.multiplier {
+    font-size: 64px;
+    color: #40C057; /* 상승 중일 땐 초록색 */
+}
+
+/* 배팅 조작 영역 */
+.betting-controls {
+    background-color: white;
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    min-width: 150px;
+}
+.input-group label {
+    color: #868E96;
+    font-size: 14px;
+}
+.input-box {
+    display: flex;
+    align-items: center;
+    background-color: #F8F9FA;
+    border-radius: 10px;
+    padding: 10px;
+    border: 2px solid #E9ECEF;
+}
+.input-box input {
+    border: none;
+    background: none;
+    outline: none;
+    width: 100%;
+    font-size: 18px;
+    text-align: right;
+}
+.input-box span {
+    margin-left: 10px;
+    color: #ADB5BD;
+}
+.btn-bet {
+    background-color: #FFD43B;
+    color: #333;
+    padding: 15px 30px;
+    font-size: 24px;
+    height: 100%;
+    border-radius: 15px;
+    box-shadow: 0 4px 0 #F5A623;
+}
+.btn-bet:active {
+    transform: translateY(4px);
+    box-shadow: 0 0 0 #F5A623;
+}
+
+/* 최근 기록 영역 */
+.history-box {
+    background-color: white;
+    padding: 15px 20px;
+    border-radius: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+.history-list {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    overflow-x: auto;
+    padding-bottom: 5px;
+}
+.history-item {
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 14px;
+    white-space: nowrap;
+}
+.history-item.win { background-color: #D3F9D8; color: #2B8A3E; }
+.history-item.lose { background-color: #FFE3E3; color: #C92A2A; }
+
+/* 모바일 접속 시 화면 비율 유지 (반응형) */
+@media (max-width: 768px) {
+    .container { flex-direction: column; }
+    header { flex-direction: column; gap: 15px; }
+    .user-info { flex-wrap: wrap; justify-content: center; }
+}
+/* 로그인 화면 전용 디자인 */
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 100vh;
+}
+
+.login-box {
+    background-color: white;
+    padding: 40px;
+    border-radius: 20px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    text-align: center;
+    width: 100%;
+    max-width: 400px;
+    border: 4px solid #FFD43B;
+}
+
+/* 게임 화면 숨김 기본 설정 (로그인 전) */
+#game-screen {
+    display: none;
+}
+/* 관리자 전용 메뉴 디자인 */
+.admin-box {
+    width: 100%;
+    max-width: 1000px;
+    background-color: #212529;
+    color: white;
+    padding: 20px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+.admin-box h2 {
+    color: #FFD43B;
+    margin-bottom: 15px;
+    text-align: center;
+}
+.admin-grid {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+.admin-section {
+    flex: 1;
+    min-width: 280px;
+    background-color: #343A40;
+    padding: 15px;
+    border-radius: 15px;
+}
+.admin-section h3 {
+    color: #F8F9FA;
+    font-size: 16px;
+    border-bottom: 2px solid #495057;
+    padding-bottom: 5px;
+}
+.admin-section input {
+    padding: 8px;
+    border-radius: 5px;
+    border: none;
+    font-family: 'Jua', sans-serif;
+}
+.request-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+.req-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #F8F9FA;
+    color: #333;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+}

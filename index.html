@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>포켓몬 그래프 게임</title>
+    <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 로그인 화면 -->
+    <div id="login-screen" class="login-container">
+        <div class="login-box">
+            <h1 class="logo" style="margin-bottom: 20px; font-size: 36px;">⚡ 포켓몬 그래프 ⚡</h1>
+            <p style="color: #868E96; margin-bottom: 30px;">디스코드 활동명으로 가입해주세요!</p>
+            
+            <div class="input-group" style="margin-bottom: 15px;">
+                <label>아이디 (디스코드 활동명)</label>
+                <div class="input-box">
+                    <input type="text" id="user-id" placeholder="아이디를 입력하세요">
+                </div>
+            </div>
+            <div class="input-group" style="margin-bottom: 25px;">
+                <label>비밀번호</label>
+                <div class="input-box">
+                    <input type="password" id="user-pw" placeholder="비밀번호를 입력하세요">
+                </div>
+            </div>
+
+            <button class="btn btn-bet" style="width: 100%; margin-bottom: 10px;" id="btn-login">로그인</button>
+            <button class="btn btn-charge" style="width: 100%; padding: 15px; font-size: 20px;" id="btn-register">회원가입</button>
+        </div>
+    </div>
+
+    <!-- 게임 메인 화면 -->
+    <div id="game-screen" style="display: none; width: 100%; display: flex; flex-direction: column; align-items: center;">
+        <header>
+            <div class="logo">⚡ 포켓몬 그래프 ⚡</div>
+            <div class="user-info">
+                <span id="display-username">유저이름</span>
+                <span class="coin"><span id="display-coin">0</span> 포켓코인</span>
+                <button class="btn btn-charge" id="btn-req-charge">충전신청</button>
+                <button class="btn btn-exchange" id="btn-req-exchange">환전신청</button>
+            </div>
+        </header>
+
+        <!-- 관리자 전용 메뉴 -->
+        <div id="admin-panel" class="admin-box" style="display: none;">
+            <h2>🛠️ 관리자 전용 컨트롤 패널</h2>
+            <div class="admin-grid">
+                
+                <!-- 자동 게임 통제소 -->
+                <div class="admin-section" style="background-color: #2F9E44;">
+                    <h3>🤖 자동 게임 통제소</h3>
+                    <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
+                        <button id="btn-admin-auto" class="btn btn-charge" style="width: 100%; font-size: 18px; padding: 10px;">🤖 24시간 자동 발사기 켜기</button>
+                    </div>
+                    <p style="font-size: 13px; color: #D3F9D8; margin-top: 8px;">* 관리자님의 인터넷 창이 켜져 있는 동안에만 무한 루프가 작동합니다.</p>
+                </div>
+
+                <div class="admin-section">
+                    <h3>💰 코인 직접 지급</h3>
+                    <div style="display: flex; gap: 5px; margin-top: 10px;">
+                        <input type="text" id="admin-target-id" placeholder="아이디" style="width: 40%;">
+                        <input type="number" id="admin-give-coin" placeholder="코인 수량" style="width: 40%;">
+                        <button id="btn-admin-give" class="btn btn-bet" style="width: 20%; font-size: 14px; padding: 5px;">지급</button>
+                    </div>
+                </div>
+
+                <div class="admin-section">
+                    <h3>📥 충전 신청 내역</h3>
+                    <div id="charge-list" class="request-list"></div>
+                </div>
+                <div class="admin-section">
+                    <h3>📤 환전 신청 내역</h3>
+                    <div id="exchange-list" class="request-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <aside class="left-banner">
+                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" alt="포켓몬 배너">
+                <h3>오늘의 행운 포켓몬!</h3>
+            </aside>
+
+            <main class="game-area">
+                
+                <!-- 그래프 캔버스 및 카운트다운 추가 -->
+                <div class="chart-box" style="position: relative;">
+                    <canvas id="graph-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
+                    <div class="multiplier" id="display-multiplier" style="position: absolute; z-index: 10;">1.00x</div>
+                    <div id="busted-msg" style="position: absolute; z-index: 10; display: none; color: #FA5252; font-size: 48px; font-weight: bold; top: 30px;">포켓몬 도망침! (Busted)</div>
+                    
+                    <!-- 새로 추가된 카운트다운 문구 -->
+                    <div id="countdown-msg" style="position: absolute; z-index: 10; display: none; color: #868E96; font-size: 24px; font-weight: bold; top: 30px;">
+                        다음 야생 포켓몬 출현까지: <span id="countdown-sec" style="color:#E67700;">15.0</span>초
+                    </div>
+                </div>
+
+                <div class="betting-controls">
+                    <div class="input-group">
+                        <label>배팅 금액</label>
+                        <div class="input-box">
+                            <input type="number" id="bet-amount" value="1000">
+                            <span>코인</span>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>자동 캐시아웃</label>
+                        <div class="input-box">
+                            <input type="number" id="auto-cashout" value="2.00">
+                            <span>배</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-bet" id="btn-betting">배팅하기</button>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
