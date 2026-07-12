@@ -4,7 +4,7 @@ import { getDatabase, ref, set, onValue, get, update, push, remove, query, order
 
 // 🔴 본인의 열쇠로 반드시 교체하세요!
 const firebaseConfig = {
-     apiKey: "AIzaSyDshai0geE4xEvD7Hl8ymGvWr2kw9tWbu8",
+    apiKey: "AIzaSyDshai0geE4xEvD7Hl8ymGvWr2kw9tWbu8",
   authDomain: "pokemongraph.firebaseapp.com",
   projectId: "pokemongraph",
   storageBucket: "pokemongraph.firebasestorage.app",
@@ -34,6 +34,7 @@ let currentGameStatus = 'offline';
 let myBetState = 'none'; 
 let myBetAmount = 0;
 let myAutoCashout = 0;
+let currentLiveMultiplier = 1.00; // ⭐ 실시간 배수를 저장할 변수 추가
 
 // --- 로그인 / 회원가입 ---
 document.getElementById('btn-register').addEventListener('click', async () => {
@@ -91,7 +92,6 @@ document.getElementById('btn-req-exchange').addEventListener('click', async () =
     alert("✅ 환전 신청이 성공적으로 접수되었습니다!");
 });
 
-
 // --- 홍보 배너 및 텍스트 실시간 동기화 ---
 onValue(ref(db, 'settings/bannerUrl'), (snapshot) => {
     const url = snapshot.val();
@@ -123,9 +123,7 @@ onValue(ref(db, 'settings/promoTexts'), (snapshot) => {
     }
 });
 
-window.removePromo = async (key) => {
-    await remove(ref(db, 'settings/promoTexts/' + key));
-};
+window.removePromo = async (key) => { await remove(ref(db, 'settings/promoTexts/' + key)); };
 
 // --- 관리자 전용 데이터 로드 ---
 function loadAdminData() {
@@ -157,7 +155,7 @@ function loadAdminData() {
                     alert(`✅ [${targetId}]님에게 ${amount.toLocaleString()} 포켓코인 지급 완료!`);
                 });
                 document.getElementById('admin-target-id').value = ''; document.getElementById('admin-give-coin').value = '';
-            } else { alert(`❌ "${targetId}" 유저를 찾을 수 없습니다. 아이디를 정확히 확인해주세요.`); }
+            } else { alert(`❌ "${targetId}" 유저를 찾을 수 없습니다.`); }
         } catch(e) { alert("지급 중 오류 발생: " + e.message); }
     };
 
@@ -197,24 +195,40 @@ window.approveExchange = async (reqId, uid, amount) => {
 };
 
 // ----------------------------------------------------
-// [핵심] 🎮 배팅 시스템 (취소 로직 및 버튼 크기 최적화)
+// [핵심] 🎮 배팅 시스템 (수동 캐시아웃 장착)
 // ----------------------------------------------------
 
 btnBetting.addEventListener('click', async () => {
     if (!currentUser) return alert("로그인 후 이용 가능합니다.");
-    if (myBetState === 'playing' || myBetState === 'cashed_out') return; 
+    if (myBetState === 'cashed_out') return; // 이미 먹튀에 성공했다면 아무 동작 안함
 
-    // ⛔ 대기열에 있던 배팅을 취소할 때 (코인 환불 및 디자인 원상복구)
+    // ⭐ 1. 수동 캐시아웃 (게임 진행 중이고, 내가 아직 비행 중일 때 클릭)
+    if (myBetState === 'playing' && currentGameStatus === 'running') {
+        myBetState = 'cashed_out'; // 상태 변경
+        const winAmount = Math.floor(myBetAmount * currentLiveMultiplier); // 현재 배수만큼 코인 계산
+        
+        await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount }); // 지갑에 지급
+        
+        // 버튼 텍스트를 축하 문구로 변경
+        btnBetting.innerText = `🎉 ${currentLiveMultiplier.toFixed(2)}x 성공! +${winAmount.toLocaleString()}`;
+        btnBetting.style.backgroundColor = "#E64980";
+        btnBetting.style.color = "white";
+        btnBetting.style.fontSize = "18px";
+        return;
+    }
+
+    // ⭐ 2. 대기열 예약 취소
     if (myBetState === 'queued') {
         await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + myBetAmount });
         myBetState = 'none';
         btnBetting.innerText = "배팅하기";
         btnBetting.style.backgroundColor = "#FFD43B";
         btnBetting.style.color = "#333";
-        btnBetting.style.fontSize = "24px"; // 폰트 크기 원상복구
+        btnBetting.style.fontSize = "24px"; 
         return;
     }
 
+    // ⭐ 3. 새로운 배팅 등록
     myBetAmount = Number(document.getElementById('bet-amount').value);
     myAutoCashout = Number(document.getElementById('auto-cashout').value);
 
@@ -222,11 +236,9 @@ btnBetting.addEventListener('click', async () => {
     if (myBetAmount > 50000) return alert("최대 배팅 가능 금액은 50,000 코인입니다!");
     if (myAutoCashout < 1.01) return alert("캐시아웃 배수는 1.01 이상이어야 합니다.");
 
-    // 배팅 예약 확정 (코인 즉시 차감)
     await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin - myBetAmount });
     myBetState = 'queued';
 
-    // 취소 버튼 디자인 (버튼이 깨지지 않게 폰트 크기를 살짝 줄임)
     btnBetting.style.backgroundColor = "#FA5252";
     btnBetting.style.color = "white";
     btnBetting.style.fontSize = "18px"; 
@@ -243,14 +255,11 @@ onValue(ref(db, 'game'), (snapshot) => {
     const game = snapshot.val();
     if (!game) return;
     
-    // 이전 상태와 현재 상태를 비교하기 위해 변수 저장
     const previousStatus = currentGameStatus;
     currentGameStatus = game.status;
 
     if (game.status === 'waiting') {
-        // [대기 중]
         if (myBetState === 'queued') {
-            // 새로고침을 했거나 다음 판을 예약해둔 유저
             btnBetting.innerText = "❌ 취소 (이번 판)";
             btnBetting.style.backgroundColor = "#FA5252";
             btnBetting.style.color = "white";
@@ -264,18 +273,13 @@ onValue(ref(db, 'game'), (snapshot) => {
         startCountdownVisuals(game.nextStartTime);
 
     } else if (game.status === 'running') {
-        // [로켓 발사!] -> 대기 중이던 예약자들을 게임에 공식 참여시킴
         if (previousStatus === 'waiting' && myBetState === 'queued') {
             myBetState = 'playing';
-            btnBetting.innerText = `🚀 비행중 (${myAutoCashout}x)`;
-            btnBetting.style.backgroundColor = "#74C0FC";
-            btnBetting.style.color = "white";
-            btnBetting.style.fontSize = "18px";
+            // 버튼 디자인은 startGameVisuals 내부에서 실시간으로 캐시아웃 유도로 바뀝니다!
         }
         startGameVisuals(game.startTime, game.crashPoint);
 
     } else if (game.status === 'crashed') {
-        // [폭발 종료] -> 게임에 참여했던 유저들의 상태를 초기화
         if (myBetState === 'playing' || myBetState === 'cashed_out') {
             myBetState = 'none';
         }
@@ -309,18 +313,31 @@ function startGameVisuals(startTime, crashPoint) {
         let currentMulti = 1.00 + (elapsed * 0.4); 
         if (currentMulti >= crashPoint) currentMulti = crashPoint;
 
+        currentLiveMultiplier = currentMulti; // 전역 변수에 실시간 배수 저장
+
         multiplierDisplay.innerText = currentMulti.toFixed(2) + "x";
         multiplierDisplay.style.color = "#40C057";
 
-        // ⭐ 실시간 캐시아웃(승리) 판정
-        if (myBetState === 'playing' && currentMulti >= myAutoCashout) {
-            myBetState = 'cashed_out';
-            const winAmount = Math.floor(myBetAmount * myAutoCashout);
-            update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
-            
-            btnBetting.innerText = `🎉 +${winAmount.toLocaleString()} 획득!`;
-            btnBetting.style.backgroundColor = "#E64980"; 
-            btnBetting.style.color = "white";
+        // ⭐ 비행 중이고 아직 이득을 안 챙긴 상태일 때 버튼 디자인 업데이트
+        if (myBetState === 'playing') {
+            if (currentMulti >= myAutoCashout) {
+                // 설정해둔 자동 배수에 먼저 도달했을 때
+                myBetState = 'cashed_out';
+                const winAmount = Math.floor(myBetAmount * myAutoCashout);
+                update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
+                
+                btnBetting.innerText = `🎉 자동성공! +${winAmount.toLocaleString()}`;
+                btnBetting.style.backgroundColor = "#E64980"; 
+                btnBetting.style.color = "white";
+                btnBetting.style.fontSize = "18px";
+            } else {
+                // 아직 날아가고 있다면 실시간 수동 캐시아웃 유도 텍스트 보여주기
+                const currentProfit = Math.floor(myBetAmount * currentMulti);
+                btnBetting.innerText = `💰 수동 캐시아웃 (+${currentProfit.toLocaleString()})`;
+                btnBetting.style.backgroundColor = "#20C997"; // 초록빛의 먹튀 유도 색상
+                btnBetting.style.color = "white";
+                btnBetting.style.fontSize = "18px";
+            }
         }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
