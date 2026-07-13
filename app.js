@@ -368,7 +368,7 @@ onValue(query(ref(db, 'history'), limitToLast(10)), (snapshot) => {
         snapshot.forEach((child) => { historyArray.push(child.val().crashPoint); });
         
         historyArray.forEach(pt => {
-            const isWin = pt >= 2.00;
+            const isWin = pt >= 1.50;
             const className = isWin ? 'history-item win' : 'history-item lose';
             listDiv.innerHTML += `<span class="${className}">${pt.toFixed(2)}x</span>`;
         });
