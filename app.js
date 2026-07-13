@@ -200,24 +200,25 @@ window.approveExchange = async (reqId, uid, amount) => {
 
 btnBetting.addEventListener('click', async () => {
     if (!currentUser) return alert("로그인 후 이용 가능합니다.");
-    if (myBetState === 'cashed_out') return; // 이미 먹튀에 성공했다면 아무 동작 안함
+    
+    // 🚨 [핵심 안전장치] 이미 성공(캐시아웃)한 상태라면 버튼을 막아서 엉뚱한 코인 차감을 방지합니다!
+    if (myBetState === 'cashed_out') return; 
 
-    // ⭐ 1. 수동 캐시아웃 (게임 진행 중이고, 내가 아직 비행 중일 때 클릭)
+    // ⭐ 1. 수동 캐시아웃 (비행 중일 때 클릭하여 즉시 수익 획득)
     if (myBetState === 'playing' && currentGameStatus === 'running') {
-        myBetState = 'cashed_out'; // 상태 변경
-        const winAmount = Math.floor(myBetAmount * currentLiveMultiplier); // 현재 배수만큼 코인 계산
+        myBetState = 'cashed_out'; // 상태를 '성공'으로 변경
+        const winAmount = Math.floor(myBetAmount * currentLiveMultiplier); 
         
-        await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount }); // 지갑에 지급
+        await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
         
-        // 버튼 텍스트를 축하 문구로 변경
-        btnBetting.innerText = `🎉 ${currentLiveMultiplier.toFixed(2)}x 성공! +${winAmount.toLocaleString()}`;
+        btnBetting.innerText = `🎉 수동 성공! +${winAmount.toLocaleString()}`;
         btnBetting.style.backgroundColor = "#E64980";
         btnBetting.style.color = "white";
         btnBetting.style.fontSize = "18px";
         return;
     }
 
-    // ⭐ 2. 대기열 예약 취소
+    // ⭐ 2. 예약된 배팅 취소 (코인 환불)
     if (myBetState === 'queued') {
         await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + myBetAmount });
         myBetState = 'none';
@@ -249,6 +250,7 @@ btnBetting.addEventListener('click', async () => {
         btnBetting.innerText = "❌ 취소 (다음 판)";
     }
 });
+
 
 // --- 게임 상태 감지 로직 ---
 onValue(ref(db, 'game'), (snapshot) => {
@@ -367,7 +369,7 @@ onValue(query(ref(db, 'history'), limitToLast(10)), (snapshot) => {
         const historyArray = [];
         snapshot.forEach((child) => { historyArray.push(child.val().crashPoint); });
         
-        historyArray.forEach(pt => {
+        historyArray.reverce().forEach(pt => {
             const isWin = pt >= 1.50;
             const className = isWin ? 'history-item win' : 'history-item lose';
             listDiv.innerHTML += `<span class="${className}">${pt.toFixed(2)}x</span>`;
