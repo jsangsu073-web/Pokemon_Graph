@@ -296,7 +296,7 @@ btnBetting.addEventListener('click', async () => {
     btnBetting.style.backgroundColor = "#FA5252";
     btnBetting.style.color = "white";
     btnBetting.style.fontSize = "18px"; 
-    btnBetting.innerText = (currentGameStatus === 'waiting') ? "❌ 취소 (이번 판)" : "❌ 취소 (다음 판)";
+    btnBetting.innerText = (currentGameStatus === 'waiting') ? "❌ 예약 취소" : "✅ 다음게임 예약 (다시 누르면 취소)";
 });
 
 onValue(ref(db, 'game'), (snapshot) => {
@@ -324,7 +324,7 @@ onValue(ref(db, 'game'), (snapshot) => {
         if (previousStatus === 'waiting' && myBetState === 'queued') myBetState = 'playing';
         startGameVisuals(game.startTime, game.crashPoint);
 
-    } else if (game.status === 'crashed') {
+        } else if (game.status === 'crashed') {
         if (myBetState === 'playing') {
             // 로그 기록 (실패)
             push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '실패', multiplier: 0, timestamp: Date.now() });
@@ -332,8 +332,18 @@ onValue(ref(db, 'game'), (snapshot) => {
         } else if (myBetState === 'cashed_out') {
             myBetState = 'none';
         }
+
+        // ⭐ 추가된 코드: 게임이 폭발하면 버튼을 원래대로 깔끔하게 되돌려줍니다! (이미 다음 판 예약한 사람은 제외)
+        if (myBetState === 'none') {
+            btnBetting.innerText = "배팅하기";
+            btnBetting.style.backgroundColor = "#FFD43B";
+            btnBetting.style.color = "#333";
+            btnBetting.style.fontSize = "24px";
+        }
+
         stopGameVisuals(game.crashPoint);
     }
+
 });
 
 function startCountdownVisuals(nextStartTime) {
