@@ -362,16 +362,22 @@ function stopGameVisuals(crashPoint) {
     const ctx = canvas.getContext('2d'); ctx.strokeStyle = "#FA5252"; ctx.stroke();
 }
 
+// --- 최근 10개 게임 기록 불러오기 ---
 onValue(query(ref(db, 'history'), limitToLast(10)), (snapshot) => {
     const listDiv = document.getElementById('history-list');
-    listDiv.innerHTML = '';
+    listDiv.innerHTML = ''; // 기존 내용을 비워줍니다
+    
     if (snapshot.exists()) {
         const historyArray = [];
-        snapshot.forEach((child) => { historyArray.push(child.val().crashPoint); });
         
-                // reverse()를 추가하여 최신 기록이 왼쪽에 오도록 뒤집습니다.
+        // 1. 데이터베이스에서 불러온 기록을 차곡차곡 배열에 담기
+        snapshot.forEach((child) => { 
+            historyArray.push(child.val().crashPoint); 
+        });
+        
+        // 2. reverse()로 순서를 뒤집어서 최신 기록이 왼쪽으로 오게 출력하기
         historyArray.reverse().forEach(pt => {
-            const isWin = pt >= 1.50;
+            const isWin = pt >= 1.50; // 1.50배 이상이면 초록색(win), 미만이면 빨간색(lose)
             const className = isWin ? 'history-item win' : 'history-item lose';
             listDiv.innerHTML += `<span class="${className}">${pt.toFixed(2)}x</span>`;
         });
