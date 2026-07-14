@@ -16,6 +16,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
+// ⭐ 서버 시간 오차 계산용 변수 (그래프가 0.5배에서 시작하는 현상 해결)
+let serverTimeOffset = 0;
+onValue(ref(db, '.info/serverTimeOffset'), (snap) => {
+    serverTimeOffset = snap.val() || 0;
+});
+
 const loginScreen = document.getElementById('login-screen');
 const gameScreen = document.getElementById('game-screen');
 const adminPanel = document.getElementById('admin-panel');
@@ -35,7 +41,7 @@ let myBetState = 'none';
 let myBetAmount = 0;
 let myAutoCashout = 0;
 let currentLiveMultiplier = 1.00; 
-let currentCrashPoint = 1.00; // ⭐ 폭발 딜레이 꼼수 방지용 변수 추가
+let currentCrashPoint = 1.00; 
 
 // --- 로그인 / 회원가입 ---
 document.getElementById('btn-register').addEventListener('click', async () => {
@@ -93,7 +99,7 @@ document.getElementById('btn-req-exchange').addEventListener('click', async () =
     alert("✅ 환전 신청이 성공적으로 접수되었습니다!");
 });
 
-// --- 홍보 배너 및 텍스트 실시간 동기화 ---
+// --- 홍보 배너 관리 ---
 onValue(ref(db, 'settings/bannerUrl'), (snapshot) => {
     const url = snapshot.val();
     if (url) document.getElementById('banner-img').src = url; 
@@ -120,7 +126,6 @@ onValue(ref(db, 'settings/promoTexts'), (snapshot) => {
     }
 });
 
-// --- 관리자 전용 데이터 로드 ---
 function loadAdminData() {
     document.getElementById('btn-admin-banner').onclick = async () => {
         const newUrl = document.getElementById('admin-banner-url').value.trim();
@@ -187,7 +192,6 @@ function loadAdminData() {
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">대기중인 신청 없음</span>'; }
     });
 
-    // 배팅 로그 리스트
     onValue(query(ref(db, 'betLogs'), limitToLast(30)), (snapshot) => {
         const listDiv = document.getElementById('bet-log-list');
         if (!listDiv) return;
@@ -205,7 +209,6 @@ function loadAdminData() {
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">기록 없음</span>'; }
     });
 
-    // 엑셀(CSV) 다운로드 기능
     const btnExportLogs = document.getElementById('btn-export-logs');
     if (btnExportLogs) {
         btnExportLogs.onclick = async () => {
@@ -232,7 +235,6 @@ function loadAdminData() {
     }
 }
 
-// 전역 함수들
 window.approveCharge = async (reqId, uid, amount) => {
     const userRef = ref(db, 'users/' + uid); const snap = await get(userRef);
     if (snap.exists()) { await update(userRef, { coin: snap.val().coin + amount }); await remove(ref(db, 'requests/charge/' + reqId)); }
@@ -250,19 +252,14 @@ window.deleteRequest = async (type, reqId) => {
 window.removePromo = async (key) => { await remove(ref(db, 'settings/promoTexts/' + key)); };
 
 // ----------------------------------------------------
-// [핵심] 🎮 배팅 시스템 (딜레이 꼼수 원천 차단 완비)
+// [핵심] 🎮 배팅 시스템
 // ----------------------------------------------------
 btnBetting.addEventListener('click', async () => {
     if (!currentUser) return alert("로그인 후 이용 가능합니다.");
     if (myBetState === 'cashed_out') return; 
 
-    // ⭐ 수동 캐시아웃 (비행 중)
     if (myBetState === 'playing' && currentGameStatus === 'running') {
-        
-        // 🚨 방어막 1: 화면상의 배당이 서버에 예정된 폭발 배수에 닿았거나 넘었다면 캐시아웃 버튼 무시 (서버 판정 대기)
-        if (currentLiveMultiplier >= currentCrashPoint) {
-            return; 
-        }
+        if (currentLiveMultiplier >= currentCrashPoint) return; 
 
         myBetState = 'cashed_out';
         const winAmount = Math.floor(myBetAmount * currentLiveMultiplier); 
@@ -277,7 +274,6 @@ btnBetting.addEventListener('click', async () => {
         return;
     }
 
-    // ⭐ 예약 취소
     if (myBetState === 'queued') {
         await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + myBetAmount });
         myBetState = 'none';
@@ -288,7 +284,6 @@ btnBetting.addEventListener('click', async () => {
         return;
     }
 
-    // ⭐ 배팅 등록
     myBetAmount = Number(document.getElementById('bet-amount').value);
     myAutoCashout = Number(document.getElementById('auto-cashout').value);
 
@@ -302,8 +297,6 @@ btnBetting.addEventListener('click', async () => {
     btnBetting.style.backgroundColor = "#FA5252";
     btnBetting.style.color = "white";
     btnBetting.style.fontSize = "18px"; 
-    
-    // 이전에 요청하셨던 '예약' 관련 텍스트 적용 부분
     btnBetting.innerText = (currentGameStatus === 'waiting') ? "❌ 예약 취소" : "✅ 다음게임 예약 (다시 누르면 취소)";
 });
 
@@ -329,11 +322,14 @@ onValue(ref(db, 'game'), (snapshot) => {
         startCountdownVisuals(game.nextStartTime);
 
     } else if (game.status === 'running') {
-        
-        currentCrashPoint = game.crashPoint; // ⭐ 서버가 미리 알려준 폭발 배수를 기록해둠
+        currentCrashPoint = game.crashPoint; 
 
         if (previousStatus === 'waiting' && myBetState === 'queued') myBetState = 'playing';
-        startGameVisuals(game.startTime, game.crashPoint);
+        
+        // ⭐ 프레임 끊김 완벽 해결: 이전 상태가 대기중이었을 때만 애니메이션 시작 (강제 재시작 방지)
+        if (previousStatus !== 'running') {
+            startGameVisuals(game.startTime, game.crashPoint);
+        }
 
     } else if (game.status === 'crashed') {
         if (myBetState === 'playing') {
@@ -343,7 +339,6 @@ onValue(ref(db, 'game'), (snapshot) => {
             myBetState = 'none';
         }
 
-        // 폭발 시 버튼 깔끔하게 즉시 초기화
         if (myBetState === 'none') {
             btnBetting.innerText = "배팅하기";
             btnBetting.style.backgroundColor = "#FFD43B";
@@ -377,14 +372,16 @@ function startGameVisuals(startTime, crashPoint) {
     const ctx = canvas.getContext('2d');
 
     const draw = () => {
-        let elapsed = (Date.now() - startTime) / 1000;
+        // ⭐ 그래프 시작점 오류 완벽 해결: 서버와의 시간 오차를 보정하고 음수를 방지함
+        let estimatedServerTime = Date.now() + serverTimeOffset;
+        let elapsed = Math.max(0, (estimatedServerTime - startTime) / 1000); 
+
         let currentMulti = 1.00 + (elapsed * 0.4); 
         
-        let isBustedLocally = false; // ⭐ 방어막 추가
-
+        let isBustedLocally = false; 
         if (currentMulti >= crashPoint) {
             currentMulti = crashPoint;
-            isBustedLocally = true; // 화면상에서 폭발 배수에 도달함
+            isBustedLocally = true; 
         }
 
         currentLiveMultiplier = currentMulti; 
@@ -394,7 +391,7 @@ function startGameVisuals(startTime, crashPoint) {
 
         if (myBetState === 'playing') {
             if (isBustedLocally) {
-                // 🚨 방어막 2: 화면은 멈췄고 서버 신호를 기다리는 '꼼수 구간' -> 자동 캐시아웃 발동 금지!
+                // 대기
             } else if (currentMulti >= myAutoCashout) {
                 myBetState = 'cashed_out';
                 const winAmount = Math.floor(myBetAmount * myAutoCashout);
@@ -435,7 +432,6 @@ function stopGameVisuals(crashPoint) {
     const ctx = canvas.getContext('2d'); ctx.strokeStyle = "#FA5252"; ctx.stroke();
 }
 
-// 최근 10개 게임 기록
 onValue(query(ref(db, 'history'), limitToLast(10)), (snapshot) => {
     const listDiv = document.getElementById('history-list');
     listDiv.innerHTML = '';
