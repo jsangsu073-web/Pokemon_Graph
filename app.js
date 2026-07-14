@@ -35,6 +35,7 @@ let myBetState = 'none';
 let myBetAmount = 0;
 let myAutoCashout = 0;
 let currentLiveMultiplier = 1.00; 
+let currentCrashPoint = 1.00; // ⭐ 폭발 딜레이 꼼수 방지용 변수 추가
 
 // --- 로그인 / 회원가입 ---
 document.getElementById('btn-register').addEventListener('click', async () => {
@@ -199,7 +200,7 @@ function loadAdminData() {
                 const color = isWin ? '#2B8A3E' : '#C92A2A';
                 const bg = isWin ? '#D3F9D8' : '#FFE3E3';
                 const multiText = isWin ? `${log.multiplier}x 획득` : `💥 증발`;
-                listDiv.innerHTML += `<div class="req-item" style="background-color: ${bg}; color: ${color};"><span>[${log.discordId}] <b>${log.betAmount.toLocaleString()}</b>코인 배팅 ➔ <b>${multiText}</b></span></div>`;
+                listDiv.innerHTML += `<div class="req-item" style="background-color: ${bg}; color: ${color};"><span>[${log.discordId}] <b>${log.betAmount.toLocaleString()}</b>코인 ➔ <b>${multiText}</b></span></div>`;
             });
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">기록 없음</span>'; }
     });
@@ -249,19 +250,24 @@ window.deleteRequest = async (type, reqId) => {
 window.removePromo = async (key) => { await remove(ref(db, 'settings/promoTexts/' + key)); };
 
 // ----------------------------------------------------
-// [핵심] 🎮 배팅 시스템
+// [핵심] 🎮 배팅 시스템 (딜레이 꼼수 원천 차단 완비)
 // ----------------------------------------------------
 btnBetting.addEventListener('click', async () => {
     if (!currentUser) return alert("로그인 후 이용 가능합니다.");
     if (myBetState === 'cashed_out') return; 
 
-    // 수동 캐시아웃 (비행 중)
+    // ⭐ 수동 캐시아웃 (비행 중)
     if (myBetState === 'playing' && currentGameStatus === 'running') {
+        
+        // 🚨 방어막 1: 화면상의 배당이 서버에 예정된 폭발 배수에 닿았거나 넘었다면 캐시아웃 버튼 무시 (서버 판정 대기)
+        if (currentLiveMultiplier >= currentCrashPoint) {
+            return; 
+        }
+
         myBetState = 'cashed_out';
         const winAmount = Math.floor(myBetAmount * currentLiveMultiplier); 
         await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
         
-        // 로그 기록 (수동)
         push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: currentLiveMultiplier.toFixed(2), timestamp: Date.now() });
 
         btnBetting.innerText = `🎉 수동 성공! +${winAmount.toLocaleString()}`;
@@ -271,7 +277,7 @@ btnBetting.addEventListener('click', async () => {
         return;
     }
 
-    // 예약 취소
+    // ⭐ 예약 취소
     if (myBetState === 'queued') {
         await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + myBetAmount });
         myBetState = 'none';
@@ -282,7 +288,7 @@ btnBetting.addEventListener('click', async () => {
         return;
     }
 
-    // 배팅 등록
+    // ⭐ 배팅 등록
     myBetAmount = Number(document.getElementById('bet-amount').value);
     myAutoCashout = Number(document.getElementById('auto-cashout').value);
 
@@ -296,6 +302,8 @@ btnBetting.addEventListener('click', async () => {
     btnBetting.style.backgroundColor = "#FA5252";
     btnBetting.style.color = "white";
     btnBetting.style.fontSize = "18px"; 
+    
+    // 이전에 요청하셨던 '예약' 관련 텍스트 적용 부분
     btnBetting.innerText = (currentGameStatus === 'waiting') ? "❌ 예약 취소" : "✅ 다음게임 예약 (다시 누르면 취소)";
 });
 
@@ -308,7 +316,7 @@ onValue(ref(db, 'game'), (snapshot) => {
 
     if (game.status === 'waiting') {
         if (myBetState === 'queued') {
-            btnBetting.innerText = "❌ 취소 (이번 판)";
+            btnBetting.innerText = "❌ 예약 취소";
             btnBetting.style.backgroundColor = "#FA5252";
             btnBetting.style.color = "white";
             btnBetting.style.fontSize = "18px";
@@ -321,19 +329,21 @@ onValue(ref(db, 'game'), (snapshot) => {
         startCountdownVisuals(game.nextStartTime);
 
     } else if (game.status === 'running') {
+        
+        currentCrashPoint = game.crashPoint; // ⭐ 서버가 미리 알려준 폭발 배수를 기록해둠
+
         if (previousStatus === 'waiting' && myBetState === 'queued') myBetState = 'playing';
         startGameVisuals(game.startTime, game.crashPoint);
 
-        } else if (game.status === 'crashed') {
+    } else if (game.status === 'crashed') {
         if (myBetState === 'playing') {
-            // 로그 기록 (실패)
             push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '실패', multiplier: 0, timestamp: Date.now() });
             myBetState = 'none';
         } else if (myBetState === 'cashed_out') {
             myBetState = 'none';
         }
 
-        // ⭐ 추가된 코드: 게임이 폭발하면 버튼을 원래대로 깔끔하게 되돌려줍니다! (이미 다음 판 예약한 사람은 제외)
+        // 폭발 시 버튼 깔끔하게 즉시 초기화
         if (myBetState === 'none') {
             btnBetting.innerText = "배팅하기";
             btnBetting.style.backgroundColor = "#FFD43B";
@@ -343,7 +353,6 @@ onValue(ref(db, 'game'), (snapshot) => {
 
         stopGameVisuals(game.crashPoint);
     }
-
 });
 
 function startCountdownVisuals(nextStartTime) {
@@ -370,7 +379,13 @@ function startGameVisuals(startTime, crashPoint) {
     const draw = () => {
         let elapsed = (Date.now() - startTime) / 1000;
         let currentMulti = 1.00 + (elapsed * 0.4); 
-        if (currentMulti >= crashPoint) currentMulti = crashPoint;
+        
+        let isBustedLocally = false; // ⭐ 방어막 추가
+
+        if (currentMulti >= crashPoint) {
+            currentMulti = crashPoint;
+            isBustedLocally = true; // 화면상에서 폭발 배수에 도달함
+        }
 
         currentLiveMultiplier = currentMulti; 
 
@@ -378,12 +393,13 @@ function startGameVisuals(startTime, crashPoint) {
         multiplierDisplay.style.color = "#40C057";
 
         if (myBetState === 'playing') {
-            if (currentMulti >= myAutoCashout) {
+            if (isBustedLocally) {
+                // 🚨 방어막 2: 화면은 멈췄고 서버 신호를 기다리는 '꼼수 구간' -> 자동 캐시아웃 발동 금지!
+            } else if (currentMulti >= myAutoCashout) {
                 myBetState = 'cashed_out';
                 const winAmount = Math.floor(myBetAmount * myAutoCashout);
                 update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
                 
-                // 로그 기록 (자동)
                 push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: myAutoCashout.toFixed(2), timestamp: Date.now() });
 
                 btnBetting.innerText = `🎉 자동성공! +${winAmount.toLocaleString()}`;
@@ -419,7 +435,7 @@ function stopGameVisuals(crashPoint) {
     const ctx = canvas.getContext('2d'); ctx.strokeStyle = "#FA5252"; ctx.stroke();
 }
 
-// 최근 10개 게임 기록 (왼쪽부터 정렬 + 1.50배 초록색)
+// 최근 10개 게임 기록
 onValue(query(ref(db, 'history'), limitToLast(10)), (snapshot) => {
     const listDiv = document.getElementById('history-list');
     listDiv.innerHTML = '';
