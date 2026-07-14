@@ -194,6 +194,72 @@ function loadAdminData() {
             });
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">대기중인 신청 없음</span>'; }
     });
+        // --- 엑셀(CSV) 다운로드 기능 ---
+    const btnExportLogs = document.getElementById('btn-export-logs');
+    if (btnExportLogs) {
+        btnExportLogs.onclick = async () => {
+            try {
+                // Firebase에서 전체 배팅 로그 불러오기
+                const snapshot = await get(ref(db, 'betLogs'));
+                if (!snapshot.exists()) return alert("다운로드할 데이터가 없습니다.");
+
+                // 한글 깨짐 방지를 위한 BOM 문자(\uFEFF)와 엑셀 윗줄(헤더) 세팅
+                let csvContent = "\uFEFF날짜/시간,아이디,배팅금,결과,배당률\n";
+                
+                const logs = [];
+                snapshot.forEach((child) => { logs.push(child.val()); });
+                
+                // 최신 기록이 위로 가도록 뒤집어서 엑셀 내용물 채우기
+                logs.reverse().forEach(log => {
+                    const date = new Date(log.timestamp).toLocaleString('ko-KR'); // 한국 시간 변환
+                    csvContent += `"${date}","${log.discordId}",${log.betAmount},"${log.result}","${log.multiplier}x"\n`;
+                });
+
+                // 컴퓨터에 파일로 만들어서 다운로드 실행
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                
+                // 오늘 날짜로 파일 이름 지정 (예: 배팅로그_2026-07-14.csv)
+                const today = new Date().toISOString().slice(0, 10);
+                link.download = `배팅로그_${today}.csv`;
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+            } catch (e) {
+                alert("다운로드 중 오류 발생: " + e.message);
+            }
+        };
+    }
+
+        // --- 관리자 전용: 실시간 배팅 로그 불러오기 ---
+    onValue(query(ref(db, 'betLogs'), limitToLast(30)), (snapshot) => {
+        const listDiv = document.getElementById('bet-log-list');
+        if (!listDiv) return;
+        listDiv.innerHTML = '';
+        if (snapshot.exists()) {
+            const logs = [];
+            snapshot.forEach((child) => { logs.push(child.val()); });
+            
+            // 최신 기록이 위로 오도록 배열을 뒤집습니다.
+            logs.reverse().forEach(log => {
+                const isWin = log.result === '성공';
+                const color = isWin ? '#2B8A3E' : '#C92A2A';
+                const bg = isWin ? '#D3F9D8' : '#FFE3E3';
+                const multiText = isWin ? `${log.multiplier}x 획득` : `💥 증발`;
+                
+                listDiv.innerHTML += `
+                    <div class="req-item" style="background-color: ${bg}; color: ${color};">
+                        <span>[${log.discordId}] <b>${log.betAmount.toLocaleString()}</b>코인 배팅 ➔ <b>${multiText}</b></span>
+                    </div>`;
+            });
+        } else {
+            listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">기록 없음</span>';
+        }
+    });
 }
 
 // 창 밖에서도 작동하는 전역 함수들 (삭제 기능 추가)
@@ -225,14 +291,26 @@ btnBetting.addEventListener('click', async () => {
     // 🚨 [핵심 안전장치] 이미 성공(캐시아웃)한 상태라면 버튼을 막아서 엉뚱한 코인 차감을 방지합니다!
     if (myBetState === 'cashed_out') return; 
 
-    // ⭐ 1. 수동 캐시아웃 (비행 중일 때 클릭하여 즉시 수익 획득)
+        // ⭐ 1. 수동 캐시아웃 (비행 중일 때 클릭하여 즉시 수익 획득)
     if (myBetState === 'playing' && currentGameStatus === 'running') {
-        myBetState = 'cashed_out'; // 상태를 '성공'으로 변경
+        myBetState = 'cashed_out';
         const winAmount = Math.floor(myBetAmount * currentLiveMultiplier); 
         
         await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
         
+        // 👇 --- 로그 기록 추가 (수동 성공) --- 👇
+        push(ref(db, 'betLogs'), {
+            discordId: currentDiscordId,
+            betAmount: myBetAmount,
+            result: '성공',
+            multiplier: currentLiveMultiplier.toFixed(2),
+            timestamp: Date.now()
+        });
+        // 👆 -------------------------------- 👆
+
         btnBetting.innerText = `🎉 수동 성공! +${winAmount.toLocaleString()}`;
+        // ... (이하 기존 코드 동일)
+
         btnBetting.style.backgroundColor = "#E64980";
         btnBetting.style.color = "white";
         btnBetting.style.fontSize = "18px";
@@ -303,7 +381,18 @@ onValue(ref(db, 'game'), (snapshot) => {
         startGameVisuals(game.startTime, game.crashPoint);
 
     } else if (game.status === 'crashed') {
-        if (myBetState === 'playing' || myBetState === 'cashed_out') {
+        if (myBetState === 'playing') {
+            // 👇 --- 로그 기록 추가 (실패) --- 👇
+            push(ref(db, 'betLogs'), {
+                discordId: currentDiscordId,
+                betAmount: myBetAmount,
+                result: '실패',
+                multiplier: 0,
+                timestamp: Date.now()
+            });
+            // 👆 ---------------------------- 👆
+            myBetState = 'none';
+        } else if (myBetState === 'cashed_out') {
             myBetState = 'none';
         }
         stopGameVisuals(game.crashPoint);
@@ -340,16 +429,25 @@ function startGameVisuals(startTime, crashPoint) {
 
         multiplierDisplay.innerText = currentMulti.toFixed(2) + "x";
         multiplierDisplay.style.color = "#40C057";
+        // ⭐ 실시간 캐시아웃(승리) 판정
+        if (myBetState === 'playing' && currentMulti >= myAutoCashout) {
+            myBetState = 'cashed_out';
+            const winAmount = Math.floor(myBetAmount * myAutoCashout);
+            update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
+            
+            // 👇 --- 로그 기록 추가 (자동 성공) --- 👇
+            push(ref(db, 'betLogs'), {
+                discordId: currentDiscordId,
+                betAmount: myBetAmount,
+                result: '성공',
+                multiplier: myAutoCashout.toFixed(2),
+                timestamp: Date.now()
+            });
+            // 👆 -------------------------------- 👆
 
-        // ⭐ 비행 중이고 아직 이득을 안 챙긴 상태일 때 버튼 디자인 업데이트
-        if (myBetState === 'playing') {
-            if (currentMulti >= myAutoCashout) {
-                // 설정해둔 자동 배수에 먼저 도달했을 때
-                myBetState = 'cashed_out';
-                const winAmount = Math.floor(myBetAmount * myAutoCashout);
-                update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
-                
-                btnBetting.innerText = `🎉 자동성공! +${winAmount.toLocaleString()}`;
+            btnBetting.innerText = `🎉 자동성공! +${winAmount.toLocaleString()}`;
+            // ... (이하 기존 코드 동일)
+
                 btnBetting.style.backgroundColor = "#E64980"; 
                 btnBetting.style.color = "white";
                 btnBetting.style.fontSize = "18px";
