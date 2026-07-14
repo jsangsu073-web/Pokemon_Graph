@@ -155,33 +155,48 @@ function loadAdminData() {
                     alert(`✅ [${targetId}]님에게 ${amount.toLocaleString()} 포켓코인 지급 완료!`);
                 });
                 document.getElementById('admin-target-id').value = ''; document.getElementById('admin-give-coin').value = '';
-            } else { alert(`❌ "${targetId}" 유저를 찾을 수 없습니다.`); }
+            } else { alert(`❌ "${targetId}" 유저를 찾을 수 없습니다. 아이디를 정확히 확인해주세요.`); }
         } catch(e) { alert("지급 중 오류 발생: " + e.message); }
     };
 
+    // 충전 신청 내역 (승인 및 삭제 버튼 추가)
     onValue(ref(db, 'requests/charge'), (snapshot) => {
         const listDiv = document.getElementById('charge-list'); listDiv.innerHTML = '';
         if (snapshot.exists()) {
             snapshot.forEach((child) => {
                 const reqId = child.key; const data = child.val();
-                listDiv.innerHTML += `<div class="req-item"><span>[${data.discordId}] <b>${data.amount.toLocaleString()}</b> 신청</span>
-                    <button class="btn btn-charge" style="padding: 5px 10px; font-size: 14px;" onclick="window.approveCharge('${reqId}', '${data.uid}', ${data.amount})">승인</button></div>`;
+                listDiv.innerHTML += `
+                    <div class="req-item">
+                        <span>[${data.discordId}] <b>${data.amount.toLocaleString()}</b> 신청</span>
+                        <div style="display: flex; gap: 5px;">
+                            <button class="btn btn-charge" style="padding: 5px 10px; font-size: 14px;" onclick="window.approveCharge('${reqId}', '${data.uid}', ${data.amount})">승인</button>
+                            <button class="btn" style="padding: 5px 10px; font-size: 14px; background-color: #FA5252; color: white;" onclick="window.deleteRequest('charge', '${reqId}')">삭제</button>
+                        </div>
+                    </div>`;
             });
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">대기중인 신청 없음</span>'; }
     });
 
+    // 환전 신청 내역 (승인 및 삭제 버튼 추가)
     onValue(ref(db, 'requests/exchange'), (snapshot) => {
         const listDiv = document.getElementById('exchange-list'); listDiv.innerHTML = '';
         if (snapshot.exists()) {
             snapshot.forEach((child) => {
                 const reqId = child.key; const data = child.val();
-                listDiv.innerHTML += `<div class="req-item"><span>[${data.discordId}] <b>${data.amount.toLocaleString()}</b> 신청</span>
-                    <button class="btn btn-exchange" style="padding: 5px 10px; font-size: 14px;" onclick="window.approveExchange('${reqId}', '${data.uid}', ${data.amount})">승인</button></div>`;
+                listDiv.innerHTML += `
+                    <div class="req-item">
+                        <span>[${data.discordId}] <b>${data.amount.toLocaleString()}</b> 신청</span>
+                        <div style="display: flex; gap: 5px;">
+                            <button class="btn btn-exchange" style="padding: 5px 10px; font-size: 14px;" onclick="window.approveExchange('${reqId}', '${data.uid}', ${data.amount})">승인</button>
+                            <button class="btn" style="padding: 5px 10px; font-size: 14px; background-color: #FA5252; color: white;" onclick="window.deleteRequest('exchange', '${reqId}')">삭제</button>
+                        </div>
+                    </div>`;
             });
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">대기중인 신청 없음</span>'; }
     });
 }
 
+// 창 밖에서도 작동하는 전역 함수들 (삭제 기능 추가)
 window.approveCharge = async (reqId, uid, amount) => {
     const userRef = ref(db, 'users/' + uid); const snap = await get(userRef);
     if (snap.exists()) { await update(userRef, { coin: snap.val().coin + amount }); await remove(ref(db, 'requests/charge/' + reqId)); }
@@ -193,6 +208,12 @@ window.approveExchange = async (reqId, uid, amount) => {
         else { alert("유저의 코인이 부족합니다!"); }
     }
 };
+window.deleteRequest = async (type, reqId) => {
+    if (confirm("정말 이 신청 내역을 삭제하시겠습니까?\n(유저의 코인은 변동되지 않으며 내역만 지워집니다.)")) {
+        await remove(ref(db, 'requests/' + type + '/' + reqId));
+    }
+};
+
 
 // ----------------------------------------------------
 // [핵심] 🎮 배팅 시스템 (수동 캐시아웃 장착)
