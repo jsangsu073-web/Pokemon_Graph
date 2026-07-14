@@ -34,7 +34,7 @@ let currentGameStatus = 'offline';
 let myBetState = 'none'; 
 let myBetAmount = 0;
 let myAutoCashout = 0;
-let currentLiveMultiplier = 1.00; // ⭐ 실시간 배수를 저장할 변수 추가
+let currentLiveMultiplier = 1.00; 
 
 // --- 로그인 / 회원가입 ---
 document.getElementById('btn-register').addEventListener('click', async () => {
@@ -107,23 +107,17 @@ onValue(ref(db, 'settings/promoTexts'), (snapshot) => {
     if (snapshot.exists()) {
         snapshot.forEach((child) => {
             const key = child.key; const text = child.val();
-            if(listDivUser) {
-                listDivUser.innerHTML += `<div style="background-color: #FFF3BF; padding: 12px; border-radius: 12px; font-size: 15px; color: #E67700; word-break: break-all; border: 2px dashed #FFD43B;">📢 ${text}</div>`;
-            }
-            if(listDivAdmin) {
-                listDivAdmin.innerHTML += `
+            if(listDivUser) listDivUser.innerHTML += `<div style="background-color: #FFF3BF; padding: 12px; border-radius: 12px; font-size: 15px; color: #E67700; word-break: break-all; border: 2px dashed #FFD43B;">📢 ${text}</div>`;
+            if(listDivAdmin) listDivAdmin.innerHTML += `
                 <div class="req-item" style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${text}</span>
                     <button class="btn btn-exchange" style="padding: 3px 8px; font-size: 12px; margin-left: 5px;" onclick="window.removePromo('${key}')">삭제</button>
                 </div>`;
-            }
         });
     } else {
         if(listDivAdmin) listDivAdmin.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">등록된 홍보가 없습니다.</span>';
     }
 });
-
-window.removePromo = async (key) => { await remove(ref(db, 'settings/promoTexts/' + key)); };
 
 // --- 관리자 전용 데이터 로드 ---
 function loadAdminData() {
@@ -145,7 +139,6 @@ function loadAdminData() {
         const targetId = document.getElementById('admin-target-id').value.trim();
         const amount = Number(document.getElementById('admin-give-coin').value);
         if (!targetId || !amount) return alert("아이디와 코인 수량을 입력해주세요!");
-        
         try {
             const q = query(ref(db, 'users'), orderByChild('discordId'), equalTo(targetId));
             const snapshot = await get(q);
@@ -155,11 +148,10 @@ function loadAdminData() {
                     alert(`✅ [${targetId}]님에게 ${amount.toLocaleString()} 포켓코인 지급 완료!`);
                 });
                 document.getElementById('admin-target-id').value = ''; document.getElementById('admin-give-coin').value = '';
-            } else { alert(`❌ "${targetId}" 유저를 찾을 수 없습니다. 아이디를 정확히 확인해주세요.`); }
+            } else { alert(`❌ "${targetId}" 유저를 찾을 수 없습니다.`); }
         } catch(e) { alert("지급 중 오류 발생: " + e.message); }
     };
 
-    // 충전 신청 내역 (승인 및 삭제 버튼 추가)
     onValue(ref(db, 'requests/charge'), (snapshot) => {
         const listDiv = document.getElementById('charge-list'); listDiv.innerHTML = '';
         if (snapshot.exists()) {
@@ -177,7 +169,6 @@ function loadAdminData() {
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">대기중인 신청 없음</span>'; }
     });
 
-    // 환전 신청 내역 (승인 및 삭제 버튼 추가)
     onValue(ref(db, 'requests/exchange'), (snapshot) => {
         const listDiv = document.getElementById('exchange-list'); listDiv.innerHTML = '';
         if (snapshot.exists()) {
@@ -194,48 +185,8 @@ function loadAdminData() {
             });
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">대기중인 신청 없음</span>'; }
     });
-        // --- 엑셀(CSV) 다운로드 기능 ---
-    const btnExportLogs = document.getElementById('btn-export-logs');
-    if (btnExportLogs) {
-        btnExportLogs.onclick = async () => {
-            try {
-                // Firebase에서 전체 배팅 로그 불러오기
-                const snapshot = await get(ref(db, 'betLogs'));
-                if (!snapshot.exists()) return alert("다운로드할 데이터가 없습니다.");
 
-                // 한글 깨짐 방지를 위한 BOM 문자(\uFEFF)와 엑셀 윗줄(헤더) 세팅
-                let csvContent = "\uFEFF날짜/시간,아이디,배팅금,결과,배당률\n";
-                
-                const logs = [];
-                snapshot.forEach((child) => { logs.push(child.val()); });
-                
-                // 최신 기록이 위로 가도록 뒤집어서 엑셀 내용물 채우기
-                logs.reverse().forEach(log => {
-                    const date = new Date(log.timestamp).toLocaleString('ko-KR'); // 한국 시간 변환
-                    csvContent += `"${date}","${log.discordId}",${log.betAmount},"${log.result}","${log.multiplier}x"\n`;
-                });
-
-                // 컴퓨터에 파일로 만들어서 다운로드 실행
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement("a");
-                link.href = url;
-                
-                // 오늘 날짜로 파일 이름 지정 (예: 배팅로그_2026-07-14.csv)
-                const today = new Date().toISOString().slice(0, 10);
-                link.download = `배팅로그_${today}.csv`;
-                
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-            } catch (e) {
-                alert("다운로드 중 오류 발생: " + e.message);
-            }
-        };
-    }
-
-        // --- 관리자 전용: 실시간 배팅 로그 불러오기 ---
+    // 배팅 로그 리스트
     onValue(query(ref(db, 'betLogs'), limitToLast(30)), (snapshot) => {
         const listDiv = document.getElementById('bet-log-list');
         if (!listDiv) return;
@@ -243,26 +194,44 @@ function loadAdminData() {
         if (snapshot.exists()) {
             const logs = [];
             snapshot.forEach((child) => { logs.push(child.val()); });
-            
-            // 최신 기록이 위로 오도록 배열을 뒤집습니다.
             logs.reverse().forEach(log => {
                 const isWin = log.result === '성공';
                 const color = isWin ? '#2B8A3E' : '#C92A2A';
                 const bg = isWin ? '#D3F9D8' : '#FFE3E3';
                 const multiText = isWin ? `${log.multiplier}x 획득` : `💥 증발`;
-                
-                listDiv.innerHTML += `
-                    <div class="req-item" style="background-color: ${bg}; color: ${color};">
-                        <span>[${log.discordId}] <b>${log.betAmount.toLocaleString()}</b>코인 배팅 ➔ <b>${multiText}</b></span>
-                    </div>`;
+                listDiv.innerHTML += `<div class="req-item" style="background-color: ${bg}; color: ${color};"><span>[${log.discordId}] <b>${log.betAmount.toLocaleString()}</b>코인 배팅 ➔ <b>${multiText}</b></span></div>`;
             });
-        } else {
-            listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">기록 없음</span>';
-        }
+        } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">기록 없음</span>'; }
     });
+
+    // 엑셀(CSV) 다운로드 기능
+    const btnExportLogs = document.getElementById('btn-export-logs');
+    if (btnExportLogs) {
+        btnExportLogs.onclick = async () => {
+            try {
+                const snapshot = await get(ref(db, 'betLogs'));
+                if (!snapshot.exists()) return alert("다운로드할 데이터가 없습니다.");
+                let csvContent = "\uFEFF날짜/시간,아이디,배팅금,결과,배당률\n";
+                const logs = [];
+                snapshot.forEach((child) => { logs.push(child.val()); });
+                logs.reverse().forEach(log => {
+                    const date = new Date(log.timestamp).toLocaleString('ko-KR');
+                    csvContent += `"${date}","${log.discordId}",${log.betAmount},"${log.result}","${log.multiplier}x"\n`;
+                });
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `배팅로그_${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (e) { alert("다운로드 중 오류 발생: " + e.message); }
+        };
+    }
 }
 
-// 창 밖에서도 작동하는 전역 함수들 (삭제 기능 추가)
+// 전역 함수들
 window.approveCharge = async (reqId, uid, amount) => {
     const userRef = ref(db, 'users/' + uid); const snap = await get(userRef);
     if (snap.exists()) { await update(userRef, { coin: snap.val().coin + amount }); await remove(ref(db, 'requests/charge/' + reqId)); }
@@ -275,49 +244,34 @@ window.approveExchange = async (reqId, uid, amount) => {
     }
 };
 window.deleteRequest = async (type, reqId) => {
-    if (confirm("정말 이 신청 내역을 삭제하시겠습니까?\n(유저의 코인은 변동되지 않으며 내역만 지워집니다.)")) {
-        await remove(ref(db, 'requests/' + type + '/' + reqId));
-    }
+    if (confirm("정말 이 신청 내역을 삭제하시겠습니까?\n(유저의 코인은 변동되지 않으며 내역만 지워집니다.)")) { await remove(ref(db, 'requests/' + type + '/' + reqId)); }
 };
-
+window.removePromo = async (key) => { await remove(ref(db, 'settings/promoTexts/' + key)); };
 
 // ----------------------------------------------------
-// [핵심] 🎮 배팅 시스템 (수동 캐시아웃 장착)
+// [핵심] 🎮 배팅 시스템
 // ----------------------------------------------------
-
 btnBetting.addEventListener('click', async () => {
     if (!currentUser) return alert("로그인 후 이용 가능합니다.");
-    
-    // 🚨 [핵심 안전장치] 이미 성공(캐시아웃)한 상태라면 버튼을 막아서 엉뚱한 코인 차감을 방지합니다!
     if (myBetState === 'cashed_out') return; 
 
-        // ⭐ 1. 수동 캐시아웃 (비행 중일 때 클릭하여 즉시 수익 획득)
+    // 수동 캐시아웃 (비행 중)
     if (myBetState === 'playing' && currentGameStatus === 'running') {
         myBetState = 'cashed_out';
         const winAmount = Math.floor(myBetAmount * currentLiveMultiplier); 
-        
         await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
         
-        // 👇 --- 로그 기록 추가 (수동 성공) --- 👇
-        push(ref(db, 'betLogs'), {
-            discordId: currentDiscordId,
-            betAmount: myBetAmount,
-            result: '성공',
-            multiplier: currentLiveMultiplier.toFixed(2),
-            timestamp: Date.now()
-        });
-        // 👆 -------------------------------- 👆
+        // 로그 기록 (수동)
+        push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: currentLiveMultiplier.toFixed(2), timestamp: Date.now() });
 
         btnBetting.innerText = `🎉 수동 성공! +${winAmount.toLocaleString()}`;
-        // ... (이하 기존 코드 동일)
-
         btnBetting.style.backgroundColor = "#E64980";
         btnBetting.style.color = "white";
         btnBetting.style.fontSize = "18px";
         return;
     }
 
-    // ⭐ 2. 예약된 배팅 취소 (코인 환불)
+    // 예약 취소
     if (myBetState === 'queued') {
         await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + myBetAmount });
         myBetState = 'none';
@@ -328,7 +282,7 @@ btnBetting.addEventListener('click', async () => {
         return;
     }
 
-    // ⭐ 3. 새로운 배팅 등록
+    // 배팅 등록
     myBetAmount = Number(document.getElementById('bet-amount').value);
     myAutoCashout = Number(document.getElementById('auto-cashout').value);
 
@@ -342,16 +296,9 @@ btnBetting.addEventListener('click', async () => {
     btnBetting.style.backgroundColor = "#FA5252";
     btnBetting.style.color = "white";
     btnBetting.style.fontSize = "18px"; 
-
-    if (currentGameStatus === 'waiting') {
-        btnBetting.innerText = "❌ 취소 (이번 판)";
-    } else {
-        btnBetting.innerText = "❌ 취소 (다음 판)";
-    }
+    btnBetting.innerText = (currentGameStatus === 'waiting') ? "❌ 취소 (이번 판)" : "❌ 취소 (다음 판)";
 });
 
-
-// --- 게임 상태 감지 로직 ---
 onValue(ref(db, 'game'), (snapshot) => {
     const game = snapshot.val();
     if (!game) return;
@@ -374,23 +321,13 @@ onValue(ref(db, 'game'), (snapshot) => {
         startCountdownVisuals(game.nextStartTime);
 
     } else if (game.status === 'running') {
-        if (previousStatus === 'waiting' && myBetState === 'queued') {
-            myBetState = 'playing';
-            // 버튼 디자인은 startGameVisuals 내부에서 실시간으로 캐시아웃 유도로 바뀝니다!
-        }
+        if (previousStatus === 'waiting' && myBetState === 'queued') myBetState = 'playing';
         startGameVisuals(game.startTime, game.crashPoint);
 
     } else if (game.status === 'crashed') {
         if (myBetState === 'playing') {
-            // 👇 --- 로그 기록 추가 (실패) --- 👇
-            push(ref(db, 'betLogs'), {
-                discordId: currentDiscordId,
-                betAmount: myBetAmount,
-                result: '실패',
-                multiplier: 0,
-                timestamp: Date.now()
-            });
-            // 👆 ---------------------------- 👆
+            // 로그 기록 (실패)
+            push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '실패', multiplier: 0, timestamp: Date.now() });
             myBetState = 'none';
         } else if (myBetState === 'cashed_out') {
             myBetState = 'none';
@@ -425,37 +362,28 @@ function startGameVisuals(startTime, crashPoint) {
         let currentMulti = 1.00 + (elapsed * 0.4); 
         if (currentMulti >= crashPoint) currentMulti = crashPoint;
 
-        currentLiveMultiplier = currentMulti; // 전역 변수에 실시간 배수 저장
+        currentLiveMultiplier = currentMulti; 
 
         multiplierDisplay.innerText = currentMulti.toFixed(2) + "x";
         multiplierDisplay.style.color = "#40C057";
-        // ⭐ 실시간 캐시아웃(승리) 판정
-        if (myBetState === 'playing' && currentMulti >= myAutoCashout) {
-            myBetState = 'cashed_out';
-            const winAmount = Math.floor(myBetAmount * myAutoCashout);
-            update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
-            
-            // 👇 --- 로그 기록 추가 (자동 성공) --- 👇
-            push(ref(db, 'betLogs'), {
-                discordId: currentDiscordId,
-                betAmount: myBetAmount,
-                result: '성공',
-                multiplier: myAutoCashout.toFixed(2),
-                timestamp: Date.now()
-            });
-            // 👆 -------------------------------- 👆
 
-            btnBetting.innerText = `🎉 자동성공! +${winAmount.toLocaleString()}`;
-            // ... (이하 기존 코드 동일)
+        if (myBetState === 'playing') {
+            if (currentMulti >= myAutoCashout) {
+                myBetState = 'cashed_out';
+                const winAmount = Math.floor(myBetAmount * myAutoCashout);
+                update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
+                
+                // 로그 기록 (자동)
+                push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: myAutoCashout.toFixed(2), timestamp: Date.now() });
 
+                btnBetting.innerText = `🎉 자동성공! +${winAmount.toLocaleString()}`;
                 btnBetting.style.backgroundColor = "#E64980"; 
                 btnBetting.style.color = "white";
                 btnBetting.style.fontSize = "18px";
             } else {
-                // 아직 날아가고 있다면 실시간 수동 캐시아웃 유도 텍스트 보여주기
                 const currentProfit = Math.floor(myBetAmount * currentMulti);
                 btnBetting.innerText = `💰 수동 캐시아웃 (+${currentProfit.toLocaleString()})`;
-                btnBetting.style.backgroundColor = "#20C997"; // 초록빛의 먹튀 유도 색상
+                btnBetting.style.backgroundColor = "#20C997"; 
                 btnBetting.style.color = "white";
                 btnBetting.style.fontSize = "18px";
             }
@@ -481,22 +409,16 @@ function stopGameVisuals(crashPoint) {
     const ctx = canvas.getContext('2d'); ctx.strokeStyle = "#FA5252"; ctx.stroke();
 }
 
-// --- 최근 10개 게임 기록 불러오기 ---
+// 최근 10개 게임 기록 (왼쪽부터 정렬 + 1.50배 초록색)
 onValue(query(ref(db, 'history'), limitToLast(10)), (snapshot) => {
     const listDiv = document.getElementById('history-list');
-    listDiv.innerHTML = ''; // 기존 내용을 비워줍니다
-    
+    listDiv.innerHTML = '';
     if (snapshot.exists()) {
         const historyArray = [];
+        snapshot.forEach((child) => { historyArray.push(child.val().crashPoint); });
         
-        // 1. 데이터베이스에서 불러온 기록을 차곡차곡 배열에 담기
-        snapshot.forEach((child) => { 
-            historyArray.push(child.val().crashPoint); 
-        });
-        
-        // 2. reverse()로 순서를 뒤집어서 최신 기록이 왼쪽으로 오게 출력하기
         historyArray.reverse().forEach(pt => {
-            const isWin = pt >= 1.50; // 1.50배 이상이면 초록색(win), 미만이면 빨간색(lose)
+            const isWin = pt >= 1.50;
             const className = isWin ? 'history-item win' : 'history-item lose';
             listDiv.innerHTML += `<span class="${className}">${pt.toFixed(2)}x</span>`;
         });
