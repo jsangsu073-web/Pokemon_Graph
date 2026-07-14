@@ -369,7 +369,8 @@ onValue(query(ref(db, 'history'), limitToLast(10)), (snapshot) => {
         const historyArray = [];
         snapshot.forEach((child) => { historyArray.push(child.val().crashPoint); });
         
-        historyArray.reverce().forEach(pt => {
+                // reverse()를 추가하여 최신 기록이 왼쪽에 오도록 뒤집습니다.
+        historyArray.reverse().forEach(pt => {
             const isWin = pt >= 1.50;
             const className = isWin ? 'history-item win' : 'history-item lose';
             listDiv.innerHTML += `<span class="${className}">${pt.toFixed(2)}x</span>`;
