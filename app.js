@@ -1,6 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-// ⭐ increment 기능이 추가되었습니다.
 import { getDatabase, ref, set, onValue, get, update, push, remove, query, orderByChild, equalTo, limitToLast, increment } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
 // 🔴 본인의 열쇠로 반드시 교체하세요!
@@ -42,6 +41,9 @@ let myBetAmount = 0;
 let myAutoCashout = 0;
 let currentLiveMultiplier = 1.00; 
 let currentCrashPoint = 1.00; 
+
+// ⭐ 애니메이션을 부드럽게 만들기 위한 로컬 시작 시간 변수 추가
+let localGameStartTime = 0; 
 
 // --- 로그인 / 회원가입 ---
 document.getElementById('btn-register').addEventListener('click', async () => {
@@ -150,7 +152,6 @@ function loadAdminData() {
             const snapshot = await get(q);
             if (snapshot.exists()) {
                 snapshot.forEach((child) => {
-                    // ⭐ 코인 지급도 안전하게 increment로 처리
                     update(ref(db, 'users/' + child.key), { coin: increment(amount) });
                     alert(`✅ [${targetId}]님에게 ${amount.toLocaleString()} 포켓코인 지급 완료!`);
                 });
@@ -238,14 +239,14 @@ function loadAdminData() {
 
 window.approveCharge = async (reqId, uid, amount) => {
     const userRef = ref(db, 'users/' + uid); 
-    await update(userRef, { coin: increment(amount) }); // ⭐ 코인 오류 방지
+    await update(userRef, { coin: increment(amount) }); 
     await remove(ref(db, 'requests/charge/' + reqId)); 
 };
 window.approveExchange = async (reqId, uid, amount) => {
     const userRef = ref(db, 'users/' + uid); const snap = await get(userRef);
     if (snap.exists()) {
         if (snap.val().coin >= amount) { 
-            await update(userRef, { coin: increment(-amount) }); // ⭐ 코인 오류 방지
+            await update(userRef, { coin: increment(-amount) }); 
             await remove(ref(db, 'requests/exchange/' + reqId)); 
         } 
         else { alert("유저의 코인이 부족합니다!"); }
@@ -257,33 +258,28 @@ window.deleteRequest = async (type, reqId) => {
 window.removePromo = async (key) => { await remove(ref(db, 'settings/promoTexts/' + key)); };
 
 // ----------------------------------------------------
-// [핵심] 🎮 배팅 시스템 (무지연 캐시아웃 & 무결성 엔진 탑재)
+// [핵심] 🎮 배팅 시스템 (무결성 엔진)
 // ----------------------------------------------------
 btnBetting.addEventListener('click', () => {
     if (!currentUser) return alert("로그인 후 이용 가능합니다.");
     if (myBetState === 'cashed_out') return; 
 
-    // ⭐ 1. 수동 캐시아웃
     if (myBetState === 'playing' && currentGameStatus === 'running') {
         if (currentLiveMultiplier >= currentCrashPoint) return; 
 
         myBetState = 'cashed_out';
         const winAmount = Math.floor(myBetAmount * currentLiveMultiplier); 
         
-        // 🚀 즉시 UI 업데이트: await 없이 0초 만에 화면 변경하여 체감 딜레이 완벽 제거
         btnBetting.innerText = `🎉 수동 성공! +${winAmount.toLocaleString()}`;
         btnBetting.style.backgroundColor = "#E64980";
         btnBetting.style.color = "white";
         btnBetting.style.fontSize = "18px";
 
-        // 🛡️ 백그라운드 무결성 DB 업데이트: increment로 코인 꼬임 100% 방지
         update(ref(db, 'users/' + currentUser.uid), { coin: increment(winAmount) });
         push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: currentLiveMultiplier.toFixed(2), timestamp: Date.now() });
-
         return;
     }
 
-    // ⭐ 2. 예약 취소
     if (myBetState === 'queued') {
         myBetState = 'none';
         
@@ -296,7 +292,6 @@ btnBetting.addEventListener('click', () => {
         return;
     }
 
-    // ⭐ 3. 배팅 등록
     myBetAmount = Number(document.getElementById('bet-amount').value);
     myAutoCashout = Number(document.getElementById('auto-cashout').value);
 
@@ -341,11 +336,19 @@ onValue(ref(db, 'game'), (snapshot) => {
         if (previousStatus === 'waiting' && myBetState === 'queued') myBetState = 'playing';
         
         if (previousStatus !== 'running') {
-            startGameVisuals(game.startTime, game.crashPoint);
+            // ⭐ 핵심 로직: 1.00배 완벽 출발을 위한 계산
+            if (previousStatus === 'waiting') {
+                // 대기실에서 대기하다가 게임이 시작된 경우 -> 네트워크 지연 무시하고 무조건 지금부터 0초(1.00배)로 출발!
+                localGameStartTime = Date.now(); 
+            } else {
+                // 게임 중간에 새로고침 한 경우 -> 서버 시간에 맞춰 진행 중인 배수부터 시작
+                let passedTime = (Date.now() + serverTimeOffset) - game.startTime;
+                localGameStartTime = Date.now() - passedTime;
+            }
+            startGameVisuals(game.crashPoint);
         }
 
     } else if (game.status === 'crashed') {
-        // ⭐ 폭발 시 성공한 유저는 "수동 성공!" 텍스트를 초기화하지 않고 유지시킵니다.
         let wasCashedOut = (myBetState === 'cashed_out'); 
 
         if (myBetState === 'playing') {
@@ -355,7 +358,6 @@ onValue(ref(db, 'game'), (snapshot) => {
             myBetState = 'none';
         }
 
-        // 성공하지 못한 유저만 버튼을 다시 돌려줍니다.
         if (myBetState === 'none' && !wasCashedOut) {
             btnBetting.innerText = "배팅하기";
             btnBetting.style.backgroundColor = "#FFD43B";
@@ -382,15 +384,15 @@ function startCountdownVisuals(nextStartTime) {
     drawCountdown();
 }
 
-function startGameVisuals(startTime, crashPoint) {
+function startGameVisuals(crashPoint) {
     cancelAnimationFrame(gameAnimationId); cancelAnimationFrame(countdownAnimationId);
     countdownMsg.style.display = 'none'; bustedMsg.style.display = 'none';
     canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
     const ctx = canvas.getContext('2d');
 
     const draw = () => {
-        let estimatedServerTime = Date.now() + serverTimeOffset;
-        let elapsed = Math.max(0, (estimatedServerTime - startTime) / 1000); 
+        // ⭐ 서버 시간이 아닌, 방금 설정한 "완벽한 로컬 시작 시간"을 기준으로 그립니다.
+        let elapsed = Math.max(0, (Date.now() - localGameStartTime) / 1000); 
 
         let currentMulti = 1.00 + (elapsed * 0.4); 
         
@@ -412,7 +414,6 @@ function startGameVisuals(startTime, crashPoint) {
                 myBetState = 'cashed_out';
                 const winAmount = Math.floor(myBetAmount * myAutoCashout);
                 
-                // 🚀 자동 캐시아웃도 즉시 UI 업데이트 & 무결성 증감 적용
                 btnBetting.innerText = `🎉 자동성공! +${winAmount.toLocaleString()}`;
                 btnBetting.style.backgroundColor = "#E64980"; 
                 btnBetting.style.color = "white";
