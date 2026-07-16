@@ -32,7 +32,7 @@ const canvas = document.getElementById('graph-canvas');
 const btnBetting = document.getElementById('btn-betting');
 
 let currentUser = null; let currentDiscordId = ""; let currentCoin = 0;
-let isAdmin = false; let isAdminLoaded = false; // ⭐ 중복 실행 방지(최적화) 변수 추가
+let isAdmin = false; let isAdminLoaded = false; 
 let inactivityTimer;
 let gameAnimationId; let countdownAnimationId;
 
@@ -79,7 +79,6 @@ onAuthStateChanged(auth, (user) => {
                 document.getElementById('display-coin').innerText = data.coin.toLocaleString();
                 if (isAdmin) { 
                     adminPanel.style.display = 'block'; 
-                    // ⭐ 불필요한 중복 렌더링을 막아 사이트 속도를 대폭 높입니다.
                     if (!isAdminLoaded) {
                         loadAdminData();
                         isAdminLoaded = true;
@@ -203,7 +202,7 @@ function loadAdminData() {
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">대기중인 신청 없음</span>'; }
     });
 
-        onValue(query(ref(db, 'betLogs'), limitToLast(30)), (snapshot) => {
+    onValue(query(ref(db, 'betLogs'), limitToLast(30)), (snapshot) => {
         const listDiv = document.getElementById('bet-log-list');
         if (!listDiv) return;
         listDiv.innerHTML = '';
@@ -212,13 +211,10 @@ function loadAdminData() {
             snapshot.forEach((child) => { logs.push(child.val()); });
             logs.reverse().forEach(log => {
                 
-                // ⭐ 자바스크립트 크래시 방지 안전 장치 (결과가 없는 데이터 무시)
                 const resultText = log.result || '알수없음';
-                
                 const isWin = resultText === '성공';
                 const isDelayed = resultText.includes('지연'); 
                 
-                // 성공: 초록색 / 지연누름: 노란색 / 실패: 빨간색
                 const color = isWin ? '#2B8A3E' : (isDelayed ? '#E67700' : '#C92A2A');
                 const bg = isWin ? '#D3F9D8' : (isDelayed ? '#FFF3BF' : '#FFE3E3');
                 
@@ -227,10 +223,8 @@ function loadAdminData() {
                 else if (isDelayed) multiText = `버튼 눌림 (${log.multiplier}x)`;
                 else multiText = `💥 증발`;
 
-                // ⭐ 한국 시간 표시 방어 코드 (과거 숫자형 데이터와 최신 텍스트 데이터 모두 호환)
                 const timeText = log.time ? log.time : (log.timestamp ? new Date(log.timestamp).toLocaleString('ko-KR') : '시간 기록 없음');
 
-                // HTML로 그려주기 (시간도 함께 표시되도록 수정됨)
                 listDiv.innerHTML += `
                     <div class="req-item" style="background-color: ${bg}; color: ${color}; padding: 10px; margin-bottom: 5px; border-radius: 8px;">
                         <div style="font-size: 11px; color: #868E96; margin-bottom: 4px;">${timeText}</div>
@@ -241,7 +235,6 @@ function loadAdminData() {
             listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">기록 없음</span>'; 
         }
     });
-
 
     const btnExportLogs = document.getElementById('btn-export-logs');
     if (btnExportLogs) {
@@ -399,14 +392,32 @@ onValue(ref(db, 'game'), (snapshot) => {
         let wasCashedOut = (myBetState === 'cashed_out'); 
 
         if (myBetState === 'playing') {
-            const koreanTimeStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-            push(ref(db, 'betLogs'), { 
-                discordId: currentDiscordId, 
-                betAmount: myBetAmount, 
-                result: '실패', 
-                multiplier: 0, 
-                time: koreanTimeStr 
-            });
+            // ⭐ [핵심 방어선 추가] 화면이 꺼져서 자동 캐시아웃이 작동하지 않았을 때 구제해 줍니다!
+            if (myAutoCashout > 1.00 && game.crashPoint >= myAutoCashout) {
+                // 게임은 이미 터졌지만, 폭발 배수가 내 자동 캐시아웃보다 높다면 무조건 성공으로 정산!
+                const winAmount = Math.floor(myBetAmount * myAutoCashout);
+                const koreanTimeStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+                
+                update(ref(db, 'users/' + currentUser.uid), { coin: increment(winAmount) });
+                push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: myAutoCashout.toFixed(2), time: koreanTimeStr });
+                
+                btnBetting.innerText = `🎉 자동성공 (구제)! +${winAmount.toLocaleString()}`;
+                btnBetting.style.backgroundColor = "#E64980"; 
+                btnBetting.style.color = "white";
+                btnBetting.style.fontSize = "18px";
+                
+                wasCashedOut = true;
+            } else {
+                // 내 자동 캐시아웃 배수에 닿기 전에 찐으로 터진 경우에만 실패 처리
+                const koreanTimeStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+                push(ref(db, 'betLogs'), { 
+                    discordId: currentDiscordId, 
+                    betAmount: myBetAmount, 
+                    result: '실패', 
+                    multiplier: 0, 
+                    time: koreanTimeStr 
+                });
+            }
             myBetState = 'none';
         } else if (myBetState === 'cashed_out') {
             myBetState = 'none';
