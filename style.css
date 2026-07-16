@@ -290,11 +290,24 @@ header {
 .admin-toggle input:checked + .toggle-slider { background-color: #20C997; }
 .admin-toggle input:checked + .toggle-slider:before { transform: translateX(22px); }
 
-/* ⭐ 모바일 화면 가로 삐져나감(깨짐) 완벽 수정 코드 */
-*, *::before, *::after {
-    box-sizing: border-box;
+//* ⭐ 모바일 화면 깨짐(삐져나감) 및 폰트 뭉침 방지 코드 */
+html, body {
+    overflow-x: hidden; /* 가로 스크롤 자체를 아예 막아버림 */
+    width: 100%;
 }
 
-#admin-panel input {
-    min-width: 0 !important; /* 입력창이 화면 밖으로 밀어내는 것 방지 */
+* {
+    box-sizing: border-box !important;
+    word-break: break-all; /* 글자가 너무 길면 알아서 줄바꿈 해줌 */
 }
+
+#admin-panel, .betting-controls, .game-area {
+    max-width: 100vw; /* 화면 너비를 절대 넘지 않게 고정 */
+    width: 100% !important;
+}
+
+#admin-panel input, #admin-panel button {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
