@@ -289,3 +289,12 @@ header {
 .toggle-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
 .admin-toggle input:checked + .toggle-slider { background-color: #20C997; }
 .admin-toggle input:checked + .toggle-slider:before { transform: translateX(22px); }
+
+/* ⭐ 모바일 화면 가로 삐져나감(깨짐) 완벽 수정 코드 */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+#admin-panel input {
+    min-width: 0 !important; /* 입력창이 화면 밖으로 밀어내는 것 방지 */
+}
