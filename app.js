@@ -126,9 +126,9 @@ onValue(ref(db, 'settings/promoTexts'), (snapshot) => {
             const key = child.key; const text = child.val();
             if(listDivUser) listDivUser.innerHTML += `<div style="background-color: #FFF3BF; padding: 12px; border-radius: 12px; font-size: 15px; color: #E67700; word-break: break-all; border: 2px dashed #FFD43B;">📢 ${text}</div>`;
             if(listDivAdmin) listDivAdmin.innerHTML += `
-                <div class="req-item" style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${text}</span>
-                    <button class="btn btn-exchange" style="padding: 3px 8px; font-size: 12px; margin-left: 5px;" onclick="window.removePromo('${key}')">삭제</button>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
+                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color: white;">${text}</span>
+                    <button style="background: #FA5252; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-left: 5px;" onclick="window.removePromo('${key}')">삭제</button>
                 </div>`;
         });
     } else {
@@ -138,7 +138,7 @@ onValue(ref(db, 'settings/promoTexts'), (snapshot) => {
 
 function loadAdminData() {
     
-    // ⭐ [추가됨] 유저 잔액 조회 및 수정 기능
+    // ⭐ 유저 잔액 조회 및 수정, 초기화 기능
     const queryIdInput = document.getElementById('admin-query-id');
     const btnQuery = document.getElementById('btn-admin-query');
     const resultDiv = document.getElementById('admin-query-result');
@@ -146,6 +146,7 @@ function loadAdminData() {
     const resultCoin = document.getElementById('query-result-coin');
     const modifyInput = document.getElementById('admin-modify-coin');
     const btnModify = document.getElementById('btn-admin-modify');
+    const btnReset = document.getElementById('btn-admin-reset');
     const hiddenUid = document.getElementById('query-result-uid');
 
     if (btnQuery) {
@@ -161,7 +162,7 @@ function loadAdminData() {
                     resultId.innerText = userData.discordId;
                     resultCoin.innerText = userData.coin.toLocaleString();
                     hiddenUid.value = child.key;
-                    modifyInput.value = userData.coin; // 잔액 수정을 편하게 하기 위해 현재 잔액을 미리 입력해둠
+                    modifyInput.value = userData.coin; 
                     resultDiv.style.display = 'block';
                 });
             } else {
@@ -187,7 +188,14 @@ function loadAdminData() {
         };
     }
 
-    // 기존 기능들 유지...
+    if (btnReset) {
+        btnReset.onclick = () => {
+            queryIdInput.value = '';        
+            resultDiv.style.display = 'none'; 
+        };
+    }
+
+    // 기존 배너 등록 기능
     document.getElementById('btn-admin-banner').onclick = async () => {
         const newUrl = document.getElementById('admin-banner-url').value.trim();
         if (!newUrl) return alert("이미지 주소(URL)를 입력해주세요!");
@@ -202,57 +210,43 @@ function loadAdminData() {
         document.getElementById('admin-promo-text').value = '';
     };
 
-    document.getElementById('btn-admin-give').onclick = async () => {
-        const targetId = document.getElementById('admin-target-id').value.trim();
-        const amount = Number(document.getElementById('admin-give-coin').value);
-        if (!targetId || !amount) return alert("아이디와 코인 수량을 입력해주세요!");
-        try {
-            const q = query(ref(db, 'users'), orderByChild('discordId'), equalTo(targetId));
-            const snapshot = await get(q);
-            if (snapshot.exists()) {
-                snapshot.forEach((child) => {
-                    update(ref(db, 'users/' + child.key), { coin: increment(amount) });
-                    alert(`✅ [${targetId}]님에게 ${amount.toLocaleString()} 포켓코인 지급 완료!`);
-                });
-                document.getElementById('admin-target-id').value = ''; document.getElementById('admin-give-coin').value = '';
-            } else { alert(`❌ "${targetId}" 유저를 찾을 수 없습니다.`); }
-        } catch(e) { alert("지급 중 오류 발생: " + e.message); }
-    };
-
+    // 충전 요청
     onValue(ref(db, 'requests/charge'), (snapshot) => {
         const listDiv = document.getElementById('charge-list'); listDiv.innerHTML = '';
         if (snapshot.exists()) {
             snapshot.forEach((child) => {
                 const reqId = child.key; const data = child.val();
                 listDiv.innerHTML += `
-                    <div class="req-item">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: white;">
                         <span>[${data.discordId}] <b>${data.amount.toLocaleString()}</b> 신청</span>
                         <div style="display: flex; gap: 5px;">
-                            <button class="btn btn-charge" style="padding: 5px 10px; font-size: 14px;" onclick="window.approveCharge('${reqId}', '${data.uid}', ${data.amount})">승인</button>
-                            <button class="btn" style="padding: 5px 10px; font-size: 14px; background-color: #FA5252; color: white;" onclick="window.deleteRequest('charge', '${reqId}')">삭제</button>
+                            <button style="background: #20C997; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 13px;" onclick="window.approveCharge('${reqId}', '${data.uid}', ${data.amount})">승인</button>
+                            <button style="background: #FA5252; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 13px;" onclick="window.deleteRequest('charge', '${reqId}')">삭제</button>
                         </div>
                     </div>`;
             });
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">대기중인 신청 없음</span>'; }
     });
 
+    // 환전 요청
     onValue(ref(db, 'requests/exchange'), (snapshot) => {
         const listDiv = document.getElementById('exchange-list'); listDiv.innerHTML = '';
         if (snapshot.exists()) {
             snapshot.forEach((child) => {
                 const reqId = child.key; const data = child.val();
                 listDiv.innerHTML += `
-                    <div class="req-item">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: white;">
                         <span>[${data.discordId}] <b>${data.amount.toLocaleString()}</b> 신청</span>
                         <div style="display: flex; gap: 5px;">
-                            <button class="btn btn-exchange" style="padding: 5px 10px; font-size: 14px;" onclick="window.approveExchange('${reqId}', '${data.uid}', ${data.amount})">승인</button>
-                            <button class="btn" style="padding: 5px 10px; font-size: 14px; background-color: #FA5252; color: white;" onclick="window.deleteRequest('exchange', '${reqId}')">삭제</button>
+                            <button style="background: #E64980; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 13px;" onclick="window.approveExchange('${reqId}', '${data.uid}', ${data.amount})">승인</button>
+                            <button style="background: #FA5252; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 13px;" onclick="window.deleteRequest('exchange', '${reqId}')">삭제</button>
                         </div>
                     </div>`;
             });
         } else { listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">대기중인 신청 없음</span>'; }
     });
 
+    // 배팅 로그
     onValue(query(ref(db, 'betLogs'), limitToLast(30)), (snapshot) => {
         const listDiv = document.getElementById('bet-log-list');
         if (!listDiv) return;
@@ -277,7 +271,7 @@ function loadAdminData() {
                 const timeText = log.time ? log.time : (log.timestamp ? new Date(log.timestamp).toLocaleString('ko-KR') : '시간 기록 없음');
 
                 listDiv.innerHTML += `
-                    <div class="req-item" style="background-color: ${bg}; color: ${color}; padding: 10px; margin-bottom: 5px; border-radius: 8px;">
+                    <div style="background-color: ${bg}; color: ${color}; padding: 10px; margin-bottom: 5px; border-radius: 8px;">
                         <div style="font-size: 11px; color: #868E96; margin-bottom: 4px;">${timeText}</div>
                         <span>[${log.discordId || '알수없음'}] <b>${(log.betAmount || 0).toLocaleString()}</b>코인 ➔ <b>${multiText}</b></span>
                     </div>`;

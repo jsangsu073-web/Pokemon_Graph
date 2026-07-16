@@ -37,73 +37,123 @@
             </div>
         </header>
 
-        <!-- 관리자 전용 메뉴 -->
-        <div id="admin-panel" class="admin-box" style="display: none;">
-            <h2>🛠️ 관리자 전용 컨트롤 패널</h2>
-            <div class="admin-grid">
-                
-                <div class="admin-section" style="background-color: #2b8a3e;">
-                    <h3>🖼️ 배너 및 홍보 텍스트 관리</h3>
-                    <div style="display: flex; gap: 5px; margin-top: 10px;">
-                        <input type="text" id="admin-banner-url" placeholder="이미지 주소(URL) 입력" style="width: 70%;">
-                        <button id="btn-admin-banner" class="btn btn-charge" style="width: 30%; font-size: 14px; padding: 5px;">사진등록</button>
-                    </div>
-                    <div style="display: flex; gap: 5px; margin-top: 10px;">
-                        <input type="text" id="admin-promo-text" placeholder="홍보 텍스트 입력" style="width: 70%;">
-                        <button id="btn-admin-promo" class="btn btn-bet" style="width: 30%; font-size: 14px; padding: 5px;">추가</button>
-                    </div>
-                    <div id="admin-promo-list" style="margin-top: 10px; display: flex; flex-direction: column; gap: 5px; max-height: 100px; overflow-y: auto;"></div>
-                </div>
+                    <!-- ⭐ 관리자 전용 패널 (토글 스위치 & 잔액수정 적용) ⭐ -->
+            <div id="admin-panel" style="display: none; margin-top: 30px; background-color: #212529; padding: 20px; border-radius: 16px; color: white;">
+                <h2 style="text-align: center; color: #FFD43B; margin-top: 0; margin-bottom: 20px;">🛠️ 관리자 전용 컨트롤 패널</h2>
 
-                <div class="admin-section">
-                    <h3>💰 코인 직접 지급</h3>
-                    <div style="display: flex; gap: 5px; margin-top: 10px;">
-                        <input type="text" id="admin-target-id" placeholder="아이디" style="width: 40%;">
-                        <input type="number" id="admin-give-coin" placeholder="코인 수량" style="width: 40%;">
-                        <button id="btn-admin-give" class="btn btn-bet" style="width: 20%; font-size: 14px; padding: 5px;">지급</button>
-                    </div>
-                </div>
-
-                <!-- ⭐ 유저 잔액 조회 및 수정 영역 ⭐ -->
-<div style="margin-top: 20px; padding: 15px; background-color: #e3fafc; border-radius: 12px; border: 1px solid #99e9f2;">
-    <h3 style="margin-bottom: 10px; color: #0b7285;">💰 유저 잔액 조회 및 수정</h3>
-    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-        <input type="text" id="admin-query-id" placeholder="조회할 유저 아이디 입력" style="flex: 1; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
-        <button id="btn-admin-query" style="padding: 8px 15px; background-color: #228BE6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">조회하기</button>
-    </div>
-    
-    <!-- 검색 결과가 나오는 공간 -->
-    <div id="admin-query-result" style="display: none; background-color: white; padding: 15px; border-radius: 8px; border: 1px dashed #adb5bd;">
-        <p style="margin: 0 0 5px 0;">👤 아이디: <b id="query-result-id" style="font-size: 16px;"></b></p>
-        <p style="margin: 0 0 15px 0;">🪙 보유 잔액: <b id="query-result-coin" style="color: #E67700; font-size: 18px;"></b> 코인</p>
-        <div style="display: flex; gap: 10px;">
-            <input type="number" id="admin-modify-coin" placeholder="변경할 코인 수량 입력" style="flex: 1; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
-            <button id="btn-admin-modify" style="padding: 8px 15px; background-color: #E64980; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">잔액 수정</button>
-        </div>
-        <input type="hidden" id="query-result-uid">
-    </div>
-</div>
-
-               
-                <div class="admin-section">
-                    <h3>📥 충전 신청 내역</h3>
-                    <div id="charge-list" class="request-list"></div>
-                </div>
-                <div class="admin-section">
-                    <h3>📤 환전 신청 내역</h3>
-                    <div id="exchange-list" class="request-list"></div>
-                </div>
-                
-                <!-- 배팅 로그 및 엑셀 다운로드 영역 -->
-                <div class="admin-section" style="width: 100%;">
+                <!-- 1. 배너 및 홍보 관리 -->
+                <div style="background-color: #2b8a3e; padding: 15px; border-radius: 12px; margin-bottom: 15px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <h3 style="margin: 0;">📜 실시간 유저 배팅 로그</h3>
-                        <button id="btn-export-logs" class="btn btn-charge" style="padding: 5px 10px; font-size: 14px; background-color: #2F9E44;">엑셀 다운로드</button>
+                        <h3 style="margin: 0; font-size: 16px;">🖼️ 배너 및 홍보 텍스트 관리</h3>
+                        <label class="admin-toggle">
+                            <input type="checkbox" checked onchange="document.getElementById('admin-body-promo').style.display = this.checked ? 'block' : 'none'">
+                            <span class="toggle-slider"></span>
+                        </label>
                     </div>
-                    <div id="bet-log-list" class="request-list" style="max-height: 200px;"></div>
+                    <div id="admin-body-promo" style="display: block;">
+                        <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                            <input type="text" id="admin-banner-url" placeholder="이미지 주소(URL) 입력" style="flex:1; padding:8px; border-radius:4px; border:none;">
+                            <button id="btn-admin-banner" style="background:#74b816; color:white; border:none; padding:8px 12px; border-radius:4px; font-weight:bold;">사진등록</button>
+                        </div>
+                        <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                            <input type="text" id="admin-promo-text" placeholder="홍보 텍스트 입력" style="flex:1; padding:8px; border-radius:4px; border:none;">
+                            <button id="btn-admin-promo" style="background:#FFD43B; color:#333; border:none; padding:8px 12px; border-radius:4px; font-weight:bold;">추가</button>
+                        </div>
+                        <div id="admin-promo-list" style="max-height: 100px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;"></div>
+                    </div>
+                </div>
+
+                <!-- 2. 코인 직접 지급 -->
+                <div style="background-color: #343a40; padding: 15px; border-radius: 12px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="margin: 0; font-size: 16px; color: #FFD43B;">💰 코인 직접 지급</h3>
+                        <label class="admin-toggle">
+                            <input type="checkbox" checked onchange="document.getElementById('admin-body-give').style.display = this.checked ? 'block' : 'none'">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="admin-body-give" style="display: block;">
+                        <div style="display: flex; gap: 5px;">
+                            <input type="text" id="admin-target-id" placeholder="아이디" style="flex:1; padding:8px; border-radius:4px; border:none;">
+                            <input type="number" id="admin-give-coin" placeholder="코인 수량" style="flex:1; padding:8px; border-radius:4px; border:none;">
+                            <button id="btn-admin-give" style="background:#FFD43B; color:#333; border:none; padding:8px 15px; border-radius:4px; font-weight:bold;">지급</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. 유저 잔액 조회 및 수정 (슬림 비율 + 초기화) -->
+                <div style="background-color: #e3fafc; color: #343a40; padding: 15px; border-radius: 12px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="margin: 0; font-size: 16px; color: #0b7285;">💰 유저 잔액 조회 및 수정</h3>
+                        <label class="admin-toggle">
+                            <input type="checkbox" checked onchange="document.getElementById('admin-body-balance').style.display = this.checked ? 'block' : 'none'">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="admin-body-balance" style="display: block;">
+                        <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                            <input type="text" id="admin-query-id" placeholder="유저 아이디" style="flex: 1; padding: 8px 10px; border: 1px solid #ced4da; border-radius: 4px; height: 38px; box-sizing: border-box;">
+                            <button id="btn-admin-query" style="padding: 0 15px; background-color: #228BE6; color: white; border: none; border-radius: 4px; font-weight: bold; height: 38px;">조회하기</button>
+                        </div>
+                        <div id="admin-query-result" style="display: none; background-color: white; padding: 15px; border-radius: 8px; border: 1px dashed #adb5bd;">
+                            <p style="margin: 0 0 5px 0;">👤 아이디: <b id="query-result-id" style="font-size: 16px;"></b></p>
+                            <p style="margin: 0 0 15px 0;">🪙 보유 잔액: <b id="query-result-coin" style="color: #E67700; font-size: 18px;"></b> 코인</p>
+                            <div style="display: flex; gap: 5px;">
+                                <input type="number" id="admin-modify-coin" placeholder="변경할 코인 수량" style="flex: 1; padding: 8px 10px; border: 1px solid #ced4da; border-radius: 4px; height: 38px; box-sizing: border-box;">
+                                <button id="btn-admin-modify" style="padding: 0 15px; background-color: #E64980; color: white; border: none; border-radius: 4px; font-weight: bold; height: 38px; white-space: nowrap;">잔액 수정</button>
+                                <button id="btn-admin-reset" style="padding: 0 15px; background-color: #868E96; color: white; border: none; border-radius: 4px; font-weight: bold; height: 38px; white-space: nowrap;">초기화</button>
+                            </div>
+                            <input type="hidden" id="query-result-uid">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. 충전 신청 내역 -->
+                <div style="background-color: #343a40; padding: 15px; border-radius: 12px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="margin: 0; font-size: 16px;">📥 충전 신청 내역</h3>
+                        <label class="admin-toggle">
+                            <input type="checkbox" checked onchange="document.getElementById('admin-body-charge').style.display = this.checked ? 'block' : 'none'">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="admin-body-charge" style="display: block;">
+                        <div id="charge-list" style="max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;"></div>
+                    </div>
+                </div>
+
+                <!-- 5. 환전 신청 내역 -->
+                <div style="background-color: #343a40; padding: 15px; border-radius: 12px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="margin: 0; font-size: 16px;">📤 환전 신청 내역</h3>
+                        <label class="admin-toggle">
+                            <input type="checkbox" checked onchange="document.getElementById('admin-body-exchange').style.display = this.checked ? 'block' : 'none'">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="admin-body-exchange" style="display: block;">
+                        <div id="exchange-list" style="max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;"></div>
+                    </div>
+                </div>
+
+                <!-- 6. 실시간 배팅 로그 -->
+                <div style="background-color: #495057; padding: 15px; border-radius: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="margin: 0; font-size: 16px;">📊 배팅 로그</h3>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <button id="btn-export-logs" style="background-color: #20C997; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;">엑셀 다운</button>
+                            <label class="admin-toggle">
+                                <input type="checkbox" checked onchange="document.getElementById('admin-body-logs').style.display = this.checked ? 'block' : 'none'">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="admin-body-logs" style="display: block;">
+                        <div id="bet-log-list" style="max-height: 200px; overflow-y: auto; background: white; color: #333; padding: 10px; border-radius: 8px; font-size: 13px;"></div>
+                    </div>
                 </div>
             </div>
-        </div>
+
 
         <div class="container">
             <aside class="left-banner">
@@ -121,7 +171,12 @@
                         다음 야생 포켓몬 출현까지: <span id="countdown-sec" style="color:#E67700;">15.0</span>초
                     </div>
                 </div>
-
+                
+<div class="history-box">
+                    <h3 style="font-size: 16px; color: #495057;">최근 게임 기록</h3>
+                    <div class="history-list" id="history-list"><span style="color: #ADB5BD; font-size: 14px;">기록 대기 중...</span></div>
+                </div>
+                
                 <div class="betting-controls">
                     <div class="input-group">
                         <label>배팅 금액</label>
@@ -132,11 +187,6 @@
                         <div class="input-box"><input type="number" id="auto-cashout" value="2.00"><span>배</span></div>
                     </div>
                     <button class="btn btn-bet" id="btn-betting">배팅하기</button>
-                </div>
-
-                <div class="history-box">
-                    <h3 style="font-size: 16px; color: #495057;">최근 게임 기록</h3>
-                    <div class="history-list" id="history-list"><span style="color: #ADB5BD; font-size: 14px;">기록 대기 중...</span></div>
                 </div>
             </main>
         </div>
