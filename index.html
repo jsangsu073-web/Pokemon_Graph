@@ -64,6 +64,27 @@
                     </div>
                 </div>
 
+                <!-- ⭐ 유저 잔액 조회 및 수정 영역 ⭐ -->
+<div style="margin-top: 20px; padding: 15px; background-color: #e3fafc; border-radius: 12px; border: 1px solid #99e9f2;">
+    <h3 style="margin-bottom: 10px; color: #0b7285;">💰 유저 잔액 조회 및 수정</h3>
+    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+        <input type="text" id="admin-query-id" placeholder="조회할 유저 아이디 입력" style="flex: 1; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
+        <button id="btn-admin-query" style="padding: 8px 15px; background-color: #228BE6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">조회하기</button>
+    </div>
+    
+    <!-- 검색 결과가 나오는 공간 -->
+    <div id="admin-query-result" style="display: none; background-color: white; padding: 15px; border-radius: 8px; border: 1px dashed #adb5bd;">
+        <p style="margin: 0 0 5px 0;">👤 아이디: <b id="query-result-id" style="font-size: 16px;"></b></p>
+        <p style="margin: 0 0 15px 0;">🪙 보유 잔액: <b id="query-result-coin" style="color: #E67700; font-size: 18px;"></b> 코인</p>
+        <div style="display: flex; gap: 10px;">
+            <input type="number" id="admin-modify-coin" placeholder="변경할 코인 수량 입력" style="flex: 1; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
+            <button id="btn-admin-modify" style="padding: 8px 15px; background-color: #E64980; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">잔액 수정</button>
+        </div>
+        <input type="hidden" id="query-result-uid">
+    </div>
+</div>
+
+               
                 <div class="admin-section">
                     <h3>📥 충전 신청 내역</h3>
                     <div id="charge-list" class="request-list"></div>

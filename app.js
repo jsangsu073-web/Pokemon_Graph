@@ -137,6 +137,57 @@ onValue(ref(db, 'settings/promoTexts'), (snapshot) => {
 });
 
 function loadAdminData() {
+    
+    // ⭐ [추가됨] 유저 잔액 조회 및 수정 기능
+    const queryIdInput = document.getElementById('admin-query-id');
+    const btnQuery = document.getElementById('btn-admin-query');
+    const resultDiv = document.getElementById('admin-query-result');
+    const resultId = document.getElementById('query-result-id');
+    const resultCoin = document.getElementById('query-result-coin');
+    const modifyInput = document.getElementById('admin-modify-coin');
+    const btnModify = document.getElementById('btn-admin-modify');
+    const hiddenUid = document.getElementById('query-result-uid');
+
+    if (btnQuery) {
+        btnQuery.onclick = async () => {
+            const targetId = queryIdInput.value.trim();
+            if (!targetId) return alert("조회할 아이디를 입력해주세요.");
+            
+            const q = query(ref(db, 'users'), orderByChild('discordId'), equalTo(targetId));
+            const snapshot = await get(q);
+            if (snapshot.exists()) {
+                snapshot.forEach((child) => {
+                    const userData = child.val();
+                    resultId.innerText = userData.discordId;
+                    resultCoin.innerText = userData.coin.toLocaleString();
+                    hiddenUid.value = child.key;
+                    modifyInput.value = userData.coin; // 잔액 수정을 편하게 하기 위해 현재 잔액을 미리 입력해둠
+                    resultDiv.style.display = 'block';
+                });
+            } else {
+                alert(`❌ "${targetId}" 유저를 찾을 수 없습니다.`);
+                resultDiv.style.display = 'none';
+            }
+        };
+    }
+
+    if (btnModify) {
+        btnModify.onclick = async () => {
+            const uid = hiddenUid.value;
+            const newCoin = Number(modifyInput.value);
+            
+            if (!uid) return alert("먼저 유저를 조회해주세요.");
+            if (isNaN(newCoin) || newCoin < 0) return alert("올바른 숫자를 입력해주세요.");
+
+            if (confirm(`정말 [${resultId.innerText}]님의 잔액을 ${newCoin.toLocaleString()} 코인으로 완전히 덮어씌우시겠습니까?`)) {
+                await update(ref(db, 'users/' + uid), { coin: newCoin });
+                alert("✅ 잔액이 성공적으로 수정되었습니다!");
+                resultCoin.innerText = newCoin.toLocaleString(); 
+            }
+        };
+    }
+
+    // 기존 기능들 유지...
     document.getElementById('btn-admin-banner').onclick = async () => {
         const newUrl = document.getElementById('admin-banner-url').value.trim();
         if (!newUrl) return alert("이미지 주소(URL)를 입력해주세요!");
@@ -392,9 +443,7 @@ onValue(ref(db, 'game'), (snapshot) => {
         let wasCashedOut = (myBetState === 'cashed_out'); 
 
         if (myBetState === 'playing') {
-            // ⭐ [핵심 방어선 추가] 화면이 꺼져서 자동 캐시아웃이 작동하지 않았을 때 구제해 줍니다!
             if (myAutoCashout > 1.00 && game.crashPoint >= myAutoCashout) {
-                // 게임은 이미 터졌지만, 폭발 배수가 내 자동 캐시아웃보다 높다면 무조건 성공으로 정산!
                 const winAmount = Math.floor(myBetAmount * myAutoCashout);
                 const koreanTimeStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
                 
@@ -408,7 +457,6 @@ onValue(ref(db, 'game'), (snapshot) => {
                 
                 wasCashedOut = true;
             } else {
-                // 내 자동 캐시아웃 배수에 닿기 전에 찐으로 터진 경우에만 실패 처리
                 const koreanTimeStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
                 push(ref(db, 'betLogs'), { 
                     discordId: currentDiscordId, 
