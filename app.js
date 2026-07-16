@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { getDatabase, ref, set, onValue, get, update, push, remove, query, orderByChild, equalTo, limitToLast } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+// ⭐ increment 기능이 추가되었습니다.
+import { getDatabase, ref, set, onValue, get, update, push, remove, query, orderByChild, equalTo, limitToLast, increment } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
 // 🔴 본인의 열쇠로 반드시 교체하세요!
 const firebaseConfig = {
@@ -16,7 +17,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-// ⭐ 서버 시간 오차 계산용 변수 (그래프가 0.5배에서 시작하는 현상 해결)
 let serverTimeOffset = 0;
 onValue(ref(db, '.info/serverTimeOffset'), (snap) => {
     serverTimeOffset = snap.val() || 0;
@@ -150,7 +150,8 @@ function loadAdminData() {
             const snapshot = await get(q);
             if (snapshot.exists()) {
                 snapshot.forEach((child) => {
-                    update(ref(db, 'users/' + child.key), { coin: child.val().coin + amount });
+                    // ⭐ 코인 지급도 안전하게 increment로 처리
+                    update(ref(db, 'users/' + child.key), { coin: increment(amount) });
                     alert(`✅ [${targetId}]님에게 ${amount.toLocaleString()} 포켓코인 지급 완료!`);
                 });
                 document.getElementById('admin-target-id').value = ''; document.getElementById('admin-give-coin').value = '';
@@ -236,13 +237,17 @@ function loadAdminData() {
 }
 
 window.approveCharge = async (reqId, uid, amount) => {
-    const userRef = ref(db, 'users/' + uid); const snap = await get(userRef);
-    if (snap.exists()) { await update(userRef, { coin: snap.val().coin + amount }); await remove(ref(db, 'requests/charge/' + reqId)); }
+    const userRef = ref(db, 'users/' + uid); 
+    await update(userRef, { coin: increment(amount) }); // ⭐ 코인 오류 방지
+    await remove(ref(db, 'requests/charge/' + reqId)); 
 };
 window.approveExchange = async (reqId, uid, amount) => {
     const userRef = ref(db, 'users/' + uid); const snap = await get(userRef);
     if (snap.exists()) {
-        if (snap.val().coin >= amount) { await update(userRef, { coin: snap.val().coin - amount }); await remove(ref(db, 'requests/exchange/' + reqId)); } 
+        if (snap.val().coin >= amount) { 
+            await update(userRef, { coin: increment(-amount) }); // ⭐ 코인 오류 방지
+            await remove(ref(db, 'requests/exchange/' + reqId)); 
+        } 
         else { alert("유저의 코인이 부족합니다!"); }
     }
 };
@@ -252,38 +257,46 @@ window.deleteRequest = async (type, reqId) => {
 window.removePromo = async (key) => { await remove(ref(db, 'settings/promoTexts/' + key)); };
 
 // ----------------------------------------------------
-// [핵심] 🎮 배팅 시스템
+// [핵심] 🎮 배팅 시스템 (무지연 캐시아웃 & 무결성 엔진 탑재)
 // ----------------------------------------------------
-btnBetting.addEventListener('click', async () => {
+btnBetting.addEventListener('click', () => {
     if (!currentUser) return alert("로그인 후 이용 가능합니다.");
     if (myBetState === 'cashed_out') return; 
 
+    // ⭐ 1. 수동 캐시아웃
     if (myBetState === 'playing' && currentGameStatus === 'running') {
         if (currentLiveMultiplier >= currentCrashPoint) return; 
 
         myBetState = 'cashed_out';
         const winAmount = Math.floor(myBetAmount * currentLiveMultiplier); 
-        await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
         
-        push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: currentLiveMultiplier.toFixed(2), timestamp: Date.now() });
-
+        // 🚀 즉시 UI 업데이트: await 없이 0초 만에 화면 변경하여 체감 딜레이 완벽 제거
         btnBetting.innerText = `🎉 수동 성공! +${winAmount.toLocaleString()}`;
         btnBetting.style.backgroundColor = "#E64980";
         btnBetting.style.color = "white";
         btnBetting.style.fontSize = "18px";
+
+        // 🛡️ 백그라운드 무결성 DB 업데이트: increment로 코인 꼬임 100% 방지
+        update(ref(db, 'users/' + currentUser.uid), { coin: increment(winAmount) });
+        push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: currentLiveMultiplier.toFixed(2), timestamp: Date.now() });
+
         return;
     }
 
+    // ⭐ 2. 예약 취소
     if (myBetState === 'queued') {
-        await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + myBetAmount });
         myBetState = 'none';
+        
         btnBetting.innerText = "배팅하기";
         btnBetting.style.backgroundColor = "#FFD43B";
         btnBetting.style.color = "#333";
         btnBetting.style.fontSize = "24px"; 
+        
+        update(ref(db, 'users/' + currentUser.uid), { coin: increment(myBetAmount) });
         return;
     }
 
+    // ⭐ 3. 배팅 등록
     myBetAmount = Number(document.getElementById('bet-amount').value);
     myAutoCashout = Number(document.getElementById('auto-cashout').value);
 
@@ -291,13 +304,14 @@ btnBetting.addEventListener('click', async () => {
     if (myBetAmount > 50000) return alert("최대 배팅 가능 금액은 50,000 코인입니다!");
     if (myAutoCashout < 1.01) return alert("캐시아웃 배수는 1.01 이상이어야 합니다.");
 
-    await update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin - myBetAmount });
     myBetState = 'queued';
-
+    
     btnBetting.style.backgroundColor = "#FA5252";
     btnBetting.style.color = "white";
     btnBetting.style.fontSize = "18px"; 
     btnBetting.innerText = (currentGameStatus === 'waiting') ? "❌ 예약 취소" : "✅ 다음게임 예약 (다시 누르면 취소)";
+
+    update(ref(db, 'users/' + currentUser.uid), { coin: increment(-myBetAmount) });
 });
 
 onValue(ref(db, 'game'), (snapshot) => {
@@ -326,12 +340,14 @@ onValue(ref(db, 'game'), (snapshot) => {
 
         if (previousStatus === 'waiting' && myBetState === 'queued') myBetState = 'playing';
         
-        // ⭐ 프레임 끊김 완벽 해결: 이전 상태가 대기중이었을 때만 애니메이션 시작 (강제 재시작 방지)
         if (previousStatus !== 'running') {
             startGameVisuals(game.startTime, game.crashPoint);
         }
 
     } else if (game.status === 'crashed') {
+        // ⭐ 폭발 시 성공한 유저는 "수동 성공!" 텍스트를 초기화하지 않고 유지시킵니다.
+        let wasCashedOut = (myBetState === 'cashed_out'); 
+
         if (myBetState === 'playing') {
             push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '실패', multiplier: 0, timestamp: Date.now() });
             myBetState = 'none';
@@ -339,7 +355,8 @@ onValue(ref(db, 'game'), (snapshot) => {
             myBetState = 'none';
         }
 
-        if (myBetState === 'none') {
+        // 성공하지 못한 유저만 버튼을 다시 돌려줍니다.
+        if (myBetState === 'none' && !wasCashedOut) {
             btnBetting.innerText = "배팅하기";
             btnBetting.style.backgroundColor = "#FFD43B";
             btnBetting.style.color = "#333";
@@ -372,7 +389,6 @@ function startGameVisuals(startTime, crashPoint) {
     const ctx = canvas.getContext('2d');
 
     const draw = () => {
-        // ⭐ 그래프 시작점 오류 완벽 해결: 서버와의 시간 오차를 보정하고 음수를 방지함
         let estimatedServerTime = Date.now() + serverTimeOffset;
         let elapsed = Math.max(0, (estimatedServerTime - startTime) / 1000); 
 
@@ -395,14 +411,15 @@ function startGameVisuals(startTime, crashPoint) {
             } else if (currentMulti >= myAutoCashout) {
                 myBetState = 'cashed_out';
                 const winAmount = Math.floor(myBetAmount * myAutoCashout);
-                update(ref(db, 'users/' + currentUser.uid), { coin: currentCoin + winAmount });
                 
-                push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: myAutoCashout.toFixed(2), timestamp: Date.now() });
-
+                // 🚀 자동 캐시아웃도 즉시 UI 업데이트 & 무결성 증감 적용
                 btnBetting.innerText = `🎉 자동성공! +${winAmount.toLocaleString()}`;
                 btnBetting.style.backgroundColor = "#E64980"; 
                 btnBetting.style.color = "white";
                 btnBetting.style.fontSize = "18px";
+
+                update(ref(db, 'users/' + currentUser.uid), { coin: increment(winAmount) });
+                push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: myAutoCashout.toFixed(2), timestamp: Date.now() });
             } else {
                 const currentProfit = Math.floor(myBetAmount * currentMulti);
                 btnBetting.innerText = `💰 수동 캐시아웃 (+${currentProfit.toLocaleString()})`;
