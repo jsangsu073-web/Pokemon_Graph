@@ -181,10 +181,22 @@ function loadAdminData() {
             if (isNaN(newCoin) || newCoin < 0) return alert("올바른 숫자를 입력해주세요.");
 
             if (confirm(`정말 [${resultId.innerText}]님의 잔액을 ${newCoin.toLocaleString()} 코인으로 완전히 덮어씌우시겠습니까?`)) {
-                await update(ref(db, 'users/' + uid), { coin: newCoin });
-                alert("✅ 잔액이 성공적으로 수정되었습니다!");
-                resultCoin.innerText = newCoin.toLocaleString(); 
-            }
+    
+    // 1. (추가) 변경 전 기존 잔액을 콤마 빼고 숫자로 가져옵니다.
+    const oldCoin = Number(resultCoin.innerText.replace(/,/g, ''));
+    
+    // 기존 코드: 파이어베이스 잔액 업데이트
+    await update(ref(db, 'users/' + uid), { coin: newCoin });
+
+    // 2. ⭐ (추가) 파이어베이스에 몰래 로그를 기록합니다! ⭐
+    // resultId.innerText에 유저 아이디가 들어있으므로 그대로 사용합니다.
+    logCoinChange(uid, resultId.innerText, (newCoin - oldCoin), "관리자의 코인수정", newCoin);
+
+    // 기존 코드: 알림 및 화면 변경
+    alert("✅ 잔액이 성공적으로 수정되었습니다!");
+    resultCoin.innerText = newCoin.toLocaleString(); 
+}
+
         };
     }
 
@@ -309,19 +321,49 @@ function loadAdminData() {
 
 window.approveCharge = async (reqId, uid, amount) => {
     const userRef = ref(db, 'users/' + uid); 
-    await update(userRef, { coin: increment(amount) }); 
-    await remove(ref(db, 'requests/charge/' + reqId)); 
-};
-window.approveExchange = async (reqId, uid, amount) => {
-    const userRef = ref(db, 'users/' + uid); const snap = await get(userRef);
+    
+    // 1. 유저의 현재 정보를 가져와서 기존 잔액과 아이디를 파악합니다.
+    const snap = await get(userRef);
     if (snap.exists()) {
-        if (snap.val().coin >= amount) { 
-            await update(userRef, { coin: increment(-amount) }); 
-            await remove(ref(db, 'requests/exchange/' + reqId)); 
-        } 
-        else { alert("유저의 코인이 부족합니다!"); }
+        const userData = snap.val();
+        const currentBalance = userData.coin || 0;
+        const discordId = userData.discordId || "알수없음"; // 기록용 유저 아이디
+        const newBalance = currentBalance + amount; // 충전 후 최종 잔액 계산
+
+        // 기존 코드: 코인 지급 및 요청 삭제
+        await update(userRef, { coin: increment(amount) }); 
+        await remove(ref(db, 'requests/charge/' + reqId)); 
+
+        // 2. ⭐ 파이어베이스 비밀 로그 기록 ⭐
+        logCoinChange(uid, discordId, amount, "관리자의 충전승인", newBalance);
     }
 };
+
+window.approveExchange = async (reqId, uid, amount) => {
+    const userRef = ref(db, 'users/' + uid); 
+    const snap = await get(userRef);
+    
+    if (snap.exists()) {
+        const userData = snap.val();
+        const currentBalance = userData.coin || 0;
+        const discordId = userData.discordId || "알수없음"; // 기록용 유저 아이디
+
+        if (currentBalance >= amount) { 
+            const newBalance = currentBalance - amount; // 환전 후 최종 잔액 계산
+
+            // 기존 코드: 코인 차감 및 요청 삭제
+            await update(userRef, { coin: increment(-amount) }); 
+            await remove(ref(db, 'requests/exchange/' + reqId)); 
+
+            // ⭐ 파이어베이스 비밀 로그 기록 ⭐ (환전이므로 -amount 로 증감액 기록)
+            logCoinChange(uid, discordId, -amount, "관리자의 환전승인", newBalance);
+        } 
+        else { 
+            alert("유저의 코인이 부족합니다!"); 
+        }
+    }
+};
+
 window.deleteRequest = async (type, reqId) => {
     if (confirm("정말 이 신청 내역을 삭제하시겠습니까?\n(유저의 코인은 변동되지 않으며 내역만 지워집니다.)")) { await remove(ref(db, 'requests/' + type + '/' + reqId)); }
 };
@@ -357,6 +399,8 @@ btnBetting.addEventListener('click', () => {
         btnBetting.style.fontSize = "18px";
 
         update(ref(db, 'users/' + currentUser.uid), { coin: increment(winAmount) });
+        // ⭐ 비밀 로그 추가: 수동 캐시아웃 성공 ⭐
+        logCoinChange(currentUser.uid, currentDiscordId, winAmount, "수동 캐시아웃 성공", (currentCoin + winAmount));
         
         push(ref(db, 'betLogs'), { 
             discordId: currentDiscordId, 
@@ -377,6 +421,8 @@ btnBetting.addEventListener('click', () => {
         btnBetting.style.fontSize = "24px"; 
         
         update(ref(db, 'users/' + currentUser.uid), { coin: increment(myBetAmount) });
+        // ⭐ 비밀 로그 추가: 예약 취소로 인한 코인 반환 ⭐
+        logCoinChange(currentUser.uid, currentDiscordId, myBetAmount, "배팅 취소 환불", (currentCoin + myBetAmount));
         return;
     }
 
@@ -395,6 +441,8 @@ btnBetting.addEventListener('click', () => {
     btnBetting.innerText = (currentGameStatus === 'waiting') ? "❌ 예약 취소" : "✅ 다음게임 예약 (다시 누르면 취소)";
 
     update(ref(db, 'users/' + currentUser.uid), { coin: increment(-myBetAmount) });
+    // ⭐ 비밀 로그 추가: 게임 배팅으로 인한 코인 차감 ⭐
+    logCoinChange(currentUser.uid, currentDiscordId, -myBetAmount, "게임 배팅", (currentCoin - myBetAmount));
 });
 
 onValue(ref(db, 'game'), (snapshot) => {
@@ -442,6 +490,9 @@ onValue(ref(db, 'game'), (snapshot) => {
                 const koreanTimeStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
                 
                 update(ref(db, 'users/' + currentUser.uid), { coin: increment(winAmount) });
+                // ⭐ 비밀 로그 추가: 자동 캐시아웃 성공 (서버 판정) ⭐
+                logCoinChange(currentUser.uid, currentDiscordId, winAmount, "자동 캐시아웃 성공", (currentCoin + winAmount));
+
                 push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: myAutoCashout.toFixed(2), time: koreanTimeStr });
                 
                 btnBetting.innerText = `🎉 자동성공 (구제)! +${winAmount.toLocaleString()}`;
@@ -459,6 +510,7 @@ onValue(ref(db, 'game'), (snapshot) => {
                     multiplier: 0, 
                     time: koreanTimeStr 
                 });
+                // (참고) 실패 시에는 이미 배팅할 때 코인이 차감되었으므로 추가 변동은 없습니다.
             }
             myBetState = 'none';
         } else if (myBetState === 'cashed_out') {
@@ -526,6 +578,8 @@ function startGameVisuals(crashPoint) {
                 btnBetting.style.fontSize = "18px";
 
                 update(ref(db, 'users/' + currentUser.uid), { coin: increment(winAmount) });
+                // ⭐ 비밀 로그 추가: 자동 캐시아웃 성공 (화면 판정) ⭐
+                logCoinChange(currentUser.uid, currentDiscordId, winAmount, "자동 캐시아웃 성공", (currentCoin + winAmount));
                 
                 const koreanTimeStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
                 push(ref(db, 'betLogs'), { discordId: currentDiscordId, betAmount: myBetAmount, result: '성공', multiplier: myAutoCashout.toFixed(2), time: koreanTimeStr });
@@ -557,20 +611,17 @@ function stopGameVisuals(crashPoint) {
     bustedMsg.style.display = 'block';
     const ctx = canvas.getContext('2d'); ctx.strokeStyle = "#FA5252"; ctx.stroke();
 }
+// ----------------------------------------------------
 
-onValue(query(ref(db, 'history'), limitToLast(10)), (snapshot) => {
-    const listDiv = document.getElementById('history-list');
-    listDiv.innerHTML = '';
-    if (snapshot.exists()) {
-        const historyArray = [];
-        snapshot.forEach((child) => { historyArray.push(child.val().crashPoint); });
-        
-        historyArray.reverse().forEach(pt => {
-            const isWin = pt >= 1.50;
-            const className = isWin ? 'history-item win' : 'history-item lose';
-            listDiv.innerHTML += `<span class="${className}">${pt.toFixed(2)}x</span>`;
-        });
-    } else {
-        listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">기록 없음</span>';
-    }
-});
+// [로그 전용 함수] 데이터베이스에만 기록 저장
+function logCoinChange(uid, discordId, changeAmount, type, newBalance) {
+    const time = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+    push(ref(db, 'coinLogs'), {
+        uid: uid,
+        discordId: discordId,
+        changeAmount: changeAmount, // 증감액 (+1000 or -500 등)
+        type: type,                 // 사유
+        newBalance: newBalance,     // 변동 후 최종 잔액
+        time: time                  // 대한민국 시간
+    });
+}
