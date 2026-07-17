@@ -136,6 +136,7 @@ onValue(ref(db, 'settings/promoTexts'), (snapshot) => {
     }
 });
 
+
 function loadAdminData() {
     
     // ⭐ 유저 잔액 조회 및 수정, 초기화 기능
@@ -611,6 +612,24 @@ function stopGameVisuals(crashPoint) {
     bustedMsg.style.display = 'block';
     const ctx = canvas.getContext('2d'); ctx.strokeStyle = "#FA5252"; ctx.stroke();
 }
+// 📊 최근 게임결과 기록 (복구)
+onValue(query(ref(db, 'history'), limitToLast(10)), (snapshot) => {
+    const listDiv = document.getElementById('history-list');
+    listDiv.innerHTML = '';
+    if (snapshot.exists()) {
+        const historyArray = [];
+        snapshot.forEach((child) => { historyArray.push(child.val().crashPoint); });
+        
+        historyArray.reverse().forEach(pt => {
+            const isWin = pt >= 1.50;
+            const className = isWin ? 'history-item win' : 'history-item lose';
+            listDiv.innerHTML += `<span class="${className}">${pt.toFixed(2)}x</span>`;
+        });
+    } else {
+        listDiv.innerHTML = '<span style="color: #ADB5BD; font-size: 14px;">기록 없음</span>';
+    }
+});
+
 // ----------------------------------------------------
 
 // [로그 전용 함수] 데이터베이스에만 기록 저장
@@ -623,5 +642,58 @@ function logCoinChange(uid, discordId, changeAmount, type, newBalance) {
         type: type,                 // 사유
         newBalance: newBalance,     // 변동 후 최종 잔액
         time: time                  // 대한민국 시간
+    });
+}
+
+// ====================================================
+// 💰 관리자: 코인 직접 지급 시스템 (비밀 로그 탑재 및 ID 매칭 완료)
+// ====================================================
+const btnAdminGive = document.getElementById('btn-admin-give'); // 지급 버튼
+
+if (btnAdminGive) {
+    btnAdminGive.addEventListener('click', async () => {
+        // 1. 방장님의 HTML ID에 맞게 수정완료!
+        const targetId = document.getElementById('admin-target-id').value.trim();
+        const giveAmount = Number(document.getElementById('admin-give-coin').value);
+
+        if (!targetId) return alert("지급할 유저의 아이디를 입력해주세요!");
+        if (giveAmount <= 0 || isNaN(giveAmount)) return alert("정확한 코인 수량을 입력해주세요!");
+
+        try {
+            // 2. 파이어베이스에서 해당 아이디를 가진 유저 검색
+            const usersRef = ref(db, 'users');
+            const userQuery = query(usersRef, orderByChild('discordId'), equalTo(targetId));
+            const snapshot = await get(userQuery);
+
+            if (!snapshot.exists()) {
+                return alert(`❌ '${targetId}' 아이디를 가진 유저를 찾을 수 없습니다.`);
+            }
+
+            let targetUid = null;
+            let currentBalance = 0;
+
+            // 3. 유저의 고유 정보(uid)와 현재 코인 잔액 파악
+            snapshot.forEach((child) => {
+                targetUid = child.key;
+                currentBalance = child.val().coin || 0;
+            });
+
+            const newBalance = currentBalance + giveAmount;
+
+            // 4. 파이어베이스에 코인 업데이트 (지급)
+            await update(ref(db, 'users/' + targetUid), { coin: newBalance });
+
+            // 5. ⭐ 비밀 로그 기록 (부하 직원 감시용) ⭐
+            logCoinChange(targetUid, targetId, giveAmount, "관리자의 코인지급", newBalance);
+
+            // 6. 완료 알림 및 입력창 초기화
+            alert(`✅ [${targetId}]님에게 ${giveAmount.toLocaleString()} 코인이 성공적으로 지급되었습니다!`);
+            document.getElementById('admin-target-id').value = '';
+            document.getElementById('admin-give-coin').value = '';
+
+        } catch (error) {
+            console.error("코인 지급 중 에러 발생:", error);
+            alert("코인 지급에 실패했습니다. (콘솔 확인)");
+        }
     });
 }
